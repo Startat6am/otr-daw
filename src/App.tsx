@@ -81,6 +81,7 @@ export default function App() {
   const playheadRef = useRef(0);
   const clockStartRef = useRef(0);
   const rafRef = useRef<number | null>(null);
+  const dragRef = useRef<{ clipId: string; fromTrackId: string; startX: number; start: number; sourceStart: number; sourceEnd: number; mode: "move" | "left" | "right"; moved: boolean } | null>(null);
 
   function getContext() {
     if (!contextRef.current) contextRef.current = new AudioContext();
@@ -300,14 +301,52 @@ export default function App() {
             <div className="ruler" style={{ width: timelineWidth }}>
               {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * 2 * PX_PER_SECOND }}><span>{String(i * 4 + 1).padStart(2, "0")}</span></div>)}
             </div>
-            {tracks.map((track) => <div className="timeline-track" key={track.id} style={{ width: timelineWidth }}>
+            {tracks.map((track) => <div className="timeline-track" data-track-id={track.id} key={track.id} style={{ width: timelineWidth }}>
               <div className="track-label">{track.name}</div>
               {track.clips.map((clip) => {
                 const asset = assets.find((item) => item.id === clip.assetId);
                 if (!asset) return null;
                 const duration = clip.sourceEnd - clip.sourceStart;
-                return <div key={clip.id} className={`timeline-clip ${selectedClip === clip.id ? "selected" : ""}`} style={{ left: clip.start * PX_PER_SECOND, width: Math.max(34, duration * PX_PER_SECOND) }} onClick={() => setSelectedClip(clip.id)} role="button" tabIndex={0} aria-label={`Select clip ${asset.name}`} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedClip(clip.id); }}>
+                return <div key={clip.id} className={"timeline-clip " + (selectedClip === clip.id ? "selected " : "") + (dragRef.current?.clipId === clip.id ? "is-dragging" : "")} style={{ left: clip.start * PX_PER_SECOND, width: Math.max(34, duration * PX_PER_SECOND) }} onClick={() => setSelectedClip(clip.id)} role="button" tabIndex={0} aria-label={"Select clip " + asset.name} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedClip(clip.id); }}
+                  onPointerDown={(event) => {
+                    const target = event.target as HTMLElement;
+                    const edge = target.closest<HTMLElement>("[data-edge]")?.dataset.edge;
+                    dragRef.current = { clipId: clip.id, fromTrackId: track.id, startX: event.clientX, start: clip.start, sourceStart: clip.sourceStart, sourceEnd: clip.sourceEnd, mode: edge === "left" || edge === "right" ? edge : "move", moved: false };
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setSelectedClip(clip.id);
+                  }}
+                  onPointerMove={(event) => {
+                    const drag = dragRef.current;
+                    if (!drag || drag.clipId !== clip.id || !event.buttons) return;
+                    const delta = (event.clientX - drag.startX) / PX_PER_SECOND;
+                    if (Math.abs(event.clientX - drag.startX) > 3) drag.moved = true;
+                    if (drag.mode === "move") updateClip(clip.id, { start: Math.max(0, drag.start + delta) });
+                    else if (drag.mode === "left") {
+                      const sourceStart = Math.max(0, Math.min(drag.sourceEnd - .05, drag.sourceStart + delta));
+                      updateClip(clip.id, { sourceStart, start: Math.max(0, drag.start + sourceStart - drag.sourceStart) });
+                    } else updateClip(clip.id, { sourceEnd: Math.max(drag.sourceStart + .05, Math.min(asset.duration, drag.sourceEnd + delta)) });
+                  }}
+                  onPointerUp={(event) => {
+                    const drag = dragRef.current;
+                    if (!drag || drag.clipId !== clip.id) return;
+                    const dropTrack = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-track-id]")?.dataset.trackId;
+                    if (drag.moved && drag.mode === "move" && dropTrack && dropTrack !== drag.fromTrackId) {
+                      setTracks((current) => {
+                        let movedClip: Clip | undefined;
+                        const without = current.map((item) => ({ ...item, clips: item.clips.filter((candidate) => {
+                          if (candidate.id === clip.id) { movedClip = candidate; return false; }
+                          return true;
+                        }) }));
+                        return without.map((item) => item.id === dropTrack && movedClip ? { ...item, clips: [...item.clips, movedClip] } : item);
+                      });
+                      setStatus("Clip moved to another track.");
+                    }
+                    dragRef.current = null;
+                  }}
+                  onPointerCancel={() => { dragRef.current = null; }}>
+                  <span className="trim-handle trim-left" data-edge="left" aria-label="Trim clip start" />
                   <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer} /></div>
+                  <span className="trim-handle trim-right" data-edge="right" aria-label="Trim clip end" />
                   {selectedClip === clip.id && <div className="clip-nudges"><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, -1); }}>− beat</button><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, 1); }}>+ beat</button></div>}
                 </div>;
               })}
