@@ -13,7 +13,8 @@ A mobile-first browser audio workstation built with React, TypeScript, Vite and 
 - [x] Two-track timeline and clip placement
 - [x] Synchronized Play / Pause / Stop transport
 - [x] Select, delete, split and beat-nudge clips
-- [ ] Touch drag, trim handles and snap-to-grid
+- [x] Touch drag, cross-track move and trim handles
+- [ ] Snap-to-grid and timeline zoom
 - [ ] IndexedDB project persistence
 - [ ] Verify the full workflow on real mobile devices
 
