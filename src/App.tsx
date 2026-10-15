@@ -151,6 +151,17 @@ export default function App() {
     setPlayhead(0);
   }
 
+  function seekPlayhead(position: number) {
+    const next = Math.max(0, Math.min(maxTimelineSeconds(), position));
+    playheadRef.current = next;
+    setPlayhead(next);
+    const context = contextRef.current;
+    if (playingRef.current && context) scheduleFrom(next, context);
+  }
+  function maxTimelineSeconds() {
+    return Math.max(16, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clip.sourceEnd - clip.sourceStart + 2)));
+  }
+
   useEffect(() => {
     if (!isPlaying) return;
     let frame = 0;
@@ -295,9 +306,14 @@ export default function App() {
             <span className="time-readout">{formatTime(playhead)}</span>
           </div>
         </div>
-        <div className="edit-tools"><span>Tap a clip to select</span><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
+        <div className="edit-tools"><span>Tap ruler or empty track to move playhead · tap clip to select</span><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
         <div className="timeline-scroll">
-          <div className="timeline-inner" style={{ width: timelineWidth }}>
+          <div className="timeline-inner" style={{ width: timelineWidth }} onPointerDown={(event) => {
+            const target = event.target as HTMLElement;
+            if (target.closest(".timeline-clip, .track-label, .clip-nudges, .trim-handle")) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            seekPlayhead((event.clientX - rect.left) / PX_PER_SECOND);
+          }}>
             <div className="ruler" style={{ width: timelineWidth }}>
               {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * 2 * PX_PER_SECOND }}><span>{String(i * 4 + 1).padStart(2, "0")}</span></div>)}
             </div>
