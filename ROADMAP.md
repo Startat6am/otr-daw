@@ -44,12 +44,12 @@
 - [x] Drag clips horizontally with touch and pointer input
 - [x] Move clips between tracks
 - [x] Trim clip start and end handles without changing source audio
-- [ ] Add snap-to-grid toggle and beat/bar grid
-- [ ] Add timeline zoom controls
+- [x] Add snap-to-grid toggle and beat/bar grid
+- [x] Add timeline zoom controls
 - [ ] Improve selected-clip controls for small screens
 - [ ] Add undo/redo for editing operations
 
-**Progress:** Basic drag, cross-track move and trim handles are implemented. Device testing, snapping, zoom and undo/redo remain open.
+**Progress:** Basic drag, cross-track move, trim handles, beat snapping toggle and timeline zoom (50–200%) are implemented. Device testing, selected-clip mobile polish and undo/redo remain open.
 
 **Definition of done:** On a phone, a user can import audio, move and trim clips, align them to the beat, split them, and play the arrangement reliably.
 
