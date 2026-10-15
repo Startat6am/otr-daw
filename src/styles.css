@@ -95,6 +95,11 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 .edit-tools > span { margin-right: auto; color: #8d9491; font-size: 10px; }
 .edit-tools button { padding: 6px 8px; min-height: 30px; }
 .edit-tools button:disabled { opacity: .35; cursor: default; }
+.edit-tools button.tool-active { border-color: var(--mint); background: #2a4439; color: #c8ffea; }
+.zoom-control { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 2px 5px; border: 1px solid #34383a; border-radius: 8px; background: #141618; }
+.zoom-control button { min-width: 25px; min-height: 25px; padding: 2px 6px; border: 0; background: #252a28; color: var(--mint); border-radius: 5px; font-size: 14px; }
+.zoom-control span { min-width: 38px; text-align: center; color: #cbd2ce; font: 10px 'DM Mono', monospace; }
+.zoom-control button:disabled { opacity: .35; }
 .timeline-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; border-top: 1px solid #2a2d30; border-bottom: 1px solid #2a2d30; scrollbar-color: #454b48 #17191c; scrollbar-width: thin; }
 .timeline-inner { position: relative; min-height: 180px; background-image: repeating-linear-gradient(to right, transparent 0, transparent 28px, #24282a 28.5px, transparent 29px); }
 .ruler { height: 28px; position: relative; background: #121416; border-bottom: 1px solid #34383a; }
