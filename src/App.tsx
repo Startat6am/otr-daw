@@ -225,12 +225,12 @@ export default function App() {
       const index = track.clips.findIndex((clip) => clip.id === selectedClip);
       if (index < 0) return track;
       const clip = track.clips[index];
-      const local = playheadRef.current - clip.start;
+      const local = playhead - clip.start;
       const length = clip.sourceEnd - clip.sourceStart;
       if (local <= .03 || local >= length - .03) return track;
       const cut = clip.sourceStart + local;
       const left = { ...clip, sourceEnd: cut };
-      const right: Clip = { ...clip, id: uid(), start: playheadRef.current, sourceStart: cut };
+      const right: Clip = { ...clip, id: uid(), start: playhead, sourceStart: cut };
       const next = [...track.clips];
       next.splice(index, 1, left, right);
       didSplit = true;
