@@ -47,9 +47,9 @@
 - [x] Add snap-to-grid toggle and beat/bar grid
 - [x] Add timeline zoom controls
 - [ ] Improve selected-clip controls for small screens
-- [ ] Add undo/redo for editing operations
+- [x] Add undo/redo for clip editing operations
 
-**Progress:** Basic drag, cross-track move, trim handles, beat snapping toggle and timeline zoom (50–200%) are implemented. Device testing, selected-clip mobile polish and undo/redo remain open.
+**Progress:** Basic drag, cross-track move, trim handles, beat snapping toggle and timeline zoom (50–200%) are implemented. Device testing, selected-clip mobile polish and full device testing remain open. Undo/redo now stores up to 100 edit snapshots.
 
 **Definition of done:** On a phone, a user can import audio, move and trim clips, align them to the beat, split them, and play the arrangement reliably.
 
