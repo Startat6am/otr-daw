@@ -308,13 +308,11 @@ export default function App() {
         </div>
         <div className="edit-tools"><span>Tap ruler or empty track to move playhead · tap clip to select</span><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
         <div className="timeline-scroll">
-          <div className="timeline-inner" style={{ width: timelineWidth }} onPointerDown={(event) => {
-            const target = event.target as HTMLElement;
-            if (target.closest(".timeline-clip, .track-label, .clip-nudges, .trim-handle")) return;
-            const rect = event.currentTarget.getBoundingClientRect();
-            seekPlayhead((event.clientX - rect.left) / PX_PER_SECOND);
-          }}>
-            <div className="ruler" style={{ width: timelineWidth }}>
+          <div className="timeline-inner" style={{ width: timelineWidth }}>
+            <div className="ruler" style={{ width: timelineWidth }} onPointerDown={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              seekPlayhead((event.clientX - rect.left) / PX_PER_SECOND);
+            }}>
               {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * 2 * PX_PER_SECOND }}><span>{String(i * 4 + 1).padStart(2, "0")}</span></div>)}
             </div>
             {tracks.map((track) => <div className="timeline-track" data-track-id={track.id} key={track.id} style={{ width: timelineWidth }}>
