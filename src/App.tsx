@@ -400,11 +400,11 @@ export default function App() {
                       const currentTracks = tracksRef.current;
                       const nextTracks = (() => {
                         let movedClip: Clip | undefined;
-                        const without = current.map((item) => ({ ...item, clips: item.clips.filter((candidate) => {
+                        const without = currentTracks.map((item: Track) => ({ ...item, clips: item.clips.filter((candidate: Clip) => {
                           if (candidate.id === clip.id) { movedClip = candidate; return false; }
                           return true;
                         }) }));
-                        return without.map((item) => item.id === dropTrack && movedClip ? { ...item, clips: [...item.clips, movedClip] } : item);
+                        return without.map((item: Track) => item.id === dropTrack && movedClip ? { ...item, clips: [...item.clips, movedClip] } : item);
                       })();
                       tracksRef.current = nextTracks;
                       setTracks(nextTracks);
