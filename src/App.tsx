@@ -77,7 +77,7 @@ export default function App() {
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [timelineZoom, setTimelineZoom] = useState(1);
-  const [historyVersion, setHistoryVersion] = useState(0);
+  const [, setHistoryVersion] = useState(0);
   const tracksRef = useRef<Track[]>(INITIAL_TRACKS);
   const undoStackRef = useRef<Track[][]>([]);
   const redoStackRef = useRef<Track[][]>([]);
