@@ -77,6 +77,10 @@ export default function App() {
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [timelineZoom, setTimelineZoom] = useState(1);
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const tracksRef = useRef<Track[]>(INITIAL_TRACKS);
+  const undoStackRef = useRef<Track[][]>([]);
+  const redoStackRef = useRef<Track[][]>([]);
   const PX_PER_SECOND = BASE_PX_PER_SECOND * timelineZoom;
   const contextRef = useRef<AudioContext | null>(null);
   const sourcesRef = useRef<AudioBufferSourceNode[]>([]);
@@ -85,6 +89,35 @@ export default function App() {
   const clockStartRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const dragRef = useRef<{ clipId: string; fromTrackId: string; startX: number; start: number; sourceStart: number; sourceEnd: number; mode: "move" | "left" | "right"; moved: boolean } | null>(null);
+
+  function commitTracks(updater: (current: Track[]) => Track[]) {
+    const current = tracksRef.current;
+    undoStackRef.current.push(current);
+    if (undoStackRef.current.length > 100) undoStackRef.current.shift();
+    redoStackRef.current = [];
+    const next = updater(current);
+    tracksRef.current = next;
+    setTracks(next);
+    setHistoryVersion((version) => version + 1);
+  }
+  function undoEdit() {
+    const previous = undoStackRef.current.pop();
+    if (!previous) return;
+    redoStackRef.current.push(tracksRef.current);
+    tracksRef.current = previous;
+    setTracks(previous);
+    setHistoryVersion((version) => version + 1);
+    setStatus("Undo: previous edit restored.");
+  }
+  function redoEdit() {
+    const next = redoStackRef.current.pop();
+    if (!next) return;
+    undoStackRef.current.push(tracksRef.current);
+    tracksRef.current = next;
+    setTracks(next);
+    setHistoryVersion((version) => version + 1);
+    setStatus("Redo: edit restored.");
+  }
 
   function getContext() {
     if (!contextRef.current) contextRef.current = new AudioContext();
@@ -223,12 +256,18 @@ export default function App() {
   }
   function addClip(asset: ImportedAudio, trackId: string) {
     const clip: Clip = { id: uid(), assetId: asset.id, start: 0, sourceStart: 0, sourceEnd: asset.duration };
-    setTracks((current) => current.map((track) => track.id === trackId ? { ...track, clips: [...track.clips, clip] } : track));
+    commitTracks((current) => current.map((track) => track.id === trackId ? { ...track, clips: [...track.clips, clip] } : track));
     setSelectedClip(clip.id);
     setStatus(`Added ${asset.name} to ${tracks.find((track) => track.id === trackId)?.name}.`);
   }
-  function updateClip(clipId: string, change: Partial<Clip>) {
-    setTracks((current) => current.map((track) => ({ ...track, clips: track.clips.map((clip) => clip.id === clipId ? { ...clip, ...change } : clip) })));
+  function updateClip(clipId: string, change: Partial<Clip>, recordHistory = true) {
+    const updater = (current: Track[]) => current.map((track) => ({ ...track, clips: track.clips.map((clip) => clip.id === clipId ? { ...clip, ...change } : clip) }));
+    if (recordHistory) commitTracks(updater);
+    else {
+      const next = updater(tracksRef.current);
+      tracksRef.current = next;
+      setTracks(next);
+    }
   }
   function nudgeClip(clip: Clip, amount: number) {
     updateClip(clip.id, { start: Math.max(0, clip.start + amount * BEAT) });
@@ -239,7 +278,7 @@ export default function App() {
   function splitSelected() {
     if (!selectedClip) { setStatus("Select a clip first."); return; }
     let didSplit = false;
-    setTracks((current) => current.map((track) => {
+    commitTracks((current) => current.map((track) => {
       const index = track.clips.findIndex((clip) => clip.id === selectedClip);
       if (index < 0) return track;
       const clip = track.clips[index];
@@ -258,7 +297,7 @@ export default function App() {
   }
   function removeSelected() {
     if (!selectedClip) return;
-    setTracks((current) => current.map((track) => ({ ...track, clips: track.clips.filter((clip) => clip.id !== selectedClip) })));
+    commitTracks((current) => current.map((track) => ({ ...track, clips: track.clips.filter((clip) => clip.id !== selectedClip) })));
     setSelectedClip(null);
     setStatus("Clip removed from the timeline.");
   }
@@ -312,7 +351,7 @@ export default function App() {
             <span className="time-readout">{formatTime(playhead)}</span>
           </div>
         </div>
-        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
+        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><button onClick={undoEdit} disabled={undoStackRef.current.length === 0} aria-label="Undo last edit">↶ Undo</button><button onClick={redoEdit} disabled={redoStackRef.current.length === 0} aria-label="Redo last undone edit">↷ Redo</button><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
         <div className="timeline-scroll">
           <div className="timeline-inner" style={{ width: timelineWidth }}>
             <div className="ruler" style={{ width: timelineWidth }} onPointerDown={(event) => {
@@ -332,6 +371,10 @@ export default function App() {
                     const target = event.target as HTMLElement;
                     const edge = target.closest<HTMLElement>("[data-edge]")?.dataset.edge;
                     dragRef.current = { clipId: clip.id, fromTrackId: track.id, startX: event.clientX, start: clip.start, sourceStart: clip.sourceStart, sourceEnd: clip.sourceEnd, mode: edge === "left" || edge === "right" ? edge : "move", moved: false };
+                    undoStackRef.current.push(tracksRef.current);
+                    if (undoStackRef.current.length > 100) undoStackRef.current.shift();
+                    redoStackRef.current = [];
+                    setHistoryVersion((version) => version + 1);
                     event.currentTarget.setPointerCapture(event.pointerId);
                     setSelectedClip(clip.id);
                   }}
@@ -340,13 +383,13 @@ export default function App() {
                     if (!drag || drag.clipId !== clip.id || !event.buttons) return;
                     const delta = (event.clientX - drag.startX) / PX_PER_SECOND;
                     if (Math.abs(event.clientX - drag.startX) > 3) drag.moved = true;
-                    if (drag.mode === "move") updateClip(clip.id, { start: Math.max(0, snapTime(drag.start + delta)) });
+                    if (drag.mode === "move") updateClip(clip.id, { start: Math.max(0, snapTime(drag.start + delta)) }, false);
                     else if (drag.mode === "left") {
                       const sourceStart = Math.max(0, Math.min(drag.sourceEnd - .05, snapEnabled ? snapTime(drag.sourceStart + delta) : drag.sourceStart + delta));
-                      updateClip(clip.id, { sourceStart, start: Math.max(0, drag.start + sourceStart - drag.sourceStart) });
+                      updateClip(clip.id, { sourceStart, start: Math.max(0, drag.start + sourceStart - drag.sourceStart) }, false);
                     } else {
                       const sourceEnd = snapEnabled ? snapTime(drag.sourceEnd + delta) : drag.sourceEnd + delta;
-                      updateClip(clip.id, { sourceEnd: Math.max(drag.sourceStart + .05, Math.min(asset.duration, sourceEnd)) });
+                      updateClip(clip.id, { sourceEnd: Math.max(drag.sourceStart + .05, Math.min(asset.duration, sourceEnd)) }, false);
                     }
                   }}
                   onPointerUp={(event) => {
@@ -354,14 +397,17 @@ export default function App() {
                     if (!drag || drag.clipId !== clip.id) return;
                     const dropTrack = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-track-id]")?.dataset.trackId;
                     if (drag.moved && drag.mode === "move" && dropTrack && dropTrack !== drag.fromTrackId) {
-                      setTracks((current) => {
+                      const currentTracks = tracksRef.current;
+                      const nextTracks = (() => {
                         let movedClip: Clip | undefined;
                         const without = current.map((item) => ({ ...item, clips: item.clips.filter((candidate) => {
                           if (candidate.id === clip.id) { movedClip = candidate; return false; }
                           return true;
                         }) }));
                         return without.map((item) => item.id === dropTrack && movedClip ? { ...item, clips: [...item.clips, movedClip] } : item);
-                      });
+                      })();
+                      tracksRef.current = nextTracks;
+                      setTracks(nextTracks);
                       setStatus("Clip moved to another track.");
                     }
                     dragRef.current = null;
