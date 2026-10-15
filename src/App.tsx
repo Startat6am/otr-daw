@@ -11,7 +11,7 @@ type ImportedAudio = {
 type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number };
 type Track = { id: string; name: string; clips: Clip[]; gain: number };
 const BPM = 120;
-const PX_PER_SECOND = 58;
+const BASE_PX_PER_SECOND = 58;
 const BEAT = 60 / BPM;
 const INITIAL_TRACKS: Track[] = [
   { id: "track-1", name: "Track 1", clips: [], gain: 1 },
@@ -75,6 +75,9 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [timelineZoom, setTimelineZoom] = useState(1);
+  const PX_PER_SECOND = BASE_PX_PER_SECOND * timelineZoom;
   const contextRef = useRef<AudioContext | null>(null);
   const sourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const playingRef = useRef(false);
@@ -230,6 +233,9 @@ export default function App() {
   function nudgeClip(clip: Clip, amount: number) {
     updateClip(clip.id, { start: Math.max(0, clip.start + amount * BEAT) });
   }
+  function snapTime(seconds: number) {
+    return snapEnabled ? Math.round(seconds / BEAT) * BEAT : seconds;
+  }
   function splitSelected() {
     if (!selectedClip) { setStatus("Select a clip first."); return; }
     let didSplit = false;
@@ -306,14 +312,14 @@ export default function App() {
             <span className="time-readout">{formatTime(playhead)}</span>
           </div>
         </div>
-        <div className="edit-tools"><span>Tap ruler or empty track to move playhead · tap clip to select</span><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
+        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
         <div className="timeline-scroll">
           <div className="timeline-inner" style={{ width: timelineWidth }}>
             <div className="ruler" style={{ width: timelineWidth }} onPointerDown={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
               seekPlayhead((event.clientX - rect.left) / PX_PER_SECOND);
             }}>
-              {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * 2 * PX_PER_SECOND }}><span>{String(i * 4 + 1).padStart(2, "0")}</span></div>)}
+              {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * 2 * PX_PER_SECOND }}><span>{String(i + 1).padStart(2, "0")}</span></div>)}
             </div>
             {tracks.map((track) => <div className="timeline-track" data-track-id={track.id} key={track.id} style={{ width: timelineWidth }}>
               <div className="track-label">{track.name}</div>
@@ -334,11 +340,14 @@ export default function App() {
                     if (!drag || drag.clipId !== clip.id || !event.buttons) return;
                     const delta = (event.clientX - drag.startX) / PX_PER_SECOND;
                     if (Math.abs(event.clientX - drag.startX) > 3) drag.moved = true;
-                    if (drag.mode === "move") updateClip(clip.id, { start: Math.max(0, drag.start + delta) });
+                    if (drag.mode === "move") updateClip(clip.id, { start: Math.max(0, snapTime(drag.start + delta)) });
                     else if (drag.mode === "left") {
-                      const sourceStart = Math.max(0, Math.min(drag.sourceEnd - .05, drag.sourceStart + delta));
+                      const sourceStart = Math.max(0, Math.min(drag.sourceEnd - .05, snapEnabled ? snapTime(drag.sourceStart + delta) : drag.sourceStart + delta));
                       updateClip(clip.id, { sourceStart, start: Math.max(0, drag.start + sourceStart - drag.sourceStart) });
-                    } else updateClip(clip.id, { sourceEnd: Math.max(drag.sourceStart + .05, Math.min(asset.duration, drag.sourceEnd + delta)) });
+                    } else {
+                      const sourceEnd = snapEnabled ? snapTime(drag.sourceEnd + delta) : drag.sourceEnd + delta;
+                      updateClip(clip.id, { sourceEnd: Math.max(drag.sourceStart + .05, Math.min(asset.duration, sourceEnd)) });
+                    }
                   }}
                   onPointerUp={(event) => {
                     const drag = dragRef.current;
@@ -368,7 +377,7 @@ export default function App() {
             <div className="playhead" style={{ left: playhead * PX_PER_SECOND }} />
           </div>
         </div>
-        <p className="timeline-hint">Horizontal scroll · 4/4 grid · one beat = {BEAT.toFixed(2)}s. Beat nudges move selected clips.</p>
+        <p className="timeline-hint">Horizontal scroll · 4/4 grid · one beat = {BEAT.toFixed(2)}s · {snapEnabled ? "snap to beat enabled" : "free positioning"}. Zoom: {Math.round(timelineZoom * 100)}%.</p>
       </section>
 
       <footer className="footer"><span><span className="live-dot" /> AUDIO ENGINE READY</span><span>MADE FOR THE MOMENT</span></footer>
