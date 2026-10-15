@@ -2,7 +2,7 @@
 
 > Living checklist for the mobile-first audio workstation. Update this file whenever a milestone lands.
 >
-> **Current milestone:** Phase 2 — Multitrack editing foundation  
+> **Current milestone:** Phase 3 — Touch editing  
 > **Last updated:** 2026-10-15
 
 ## Status legend
@@ -41,13 +41,15 @@
 
 ## Phase 3 — Touch editing **NOW**
 
-- [ ] Drag clips horizontally with touch and pointer input
-- [ ] Move clips between tracks
-- [ ] Trim clip start and end handles without changing source audio
+- [x] Drag clips horizontally with touch and pointer input
+- [x] Move clips between tracks
+- [x] Trim clip start and end handles without changing source audio
 - [ ] Add snap-to-grid toggle and beat/bar grid
 - [ ] Add timeline zoom controls
 - [ ] Improve selected-clip controls for small screens
 - [ ] Add undo/redo for editing operations
+
+**Progress:** Basic drag, cross-track move and trim handles are implemented. Device testing, snapping, zoom and undo/redo remain open.
 
 **Definition of done:** On a phone, a user can import audio, move and trim clips, align them to the beat, split them, and play the arrangement reliably.
 
