@@ -81,3 +81,40 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
 }
+/* Multitrack arrangement */
+.asset-actions { display: flex; gap: 8px; margin: 12px 0 0 24px; }
+.add-clip-button, .edit-tools button { border: 1px solid #3b544a; border-radius: 8px; background: #203029; color: var(--mint); padding: 8px 10px; font-size: 10px; cursor: pointer; min-height: 34px; touch-action: manipulation; }
+.timeline-panel { margin-top: 18px; border: 1px solid var(--line); border-radius: 18px; padding: 18px 0 15px; overflow: hidden; background: #17191c; }
+.timeline-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 18px 16px; }
+.timeline-heading .eyebrow { margin-bottom: 7px; }
+.transport { display: flex; align-items: center; gap: 7px; }
+.transport-button { width: 36px; height: 36px; border: 1px solid #3a3e40; border-radius: 10px; background: #202326; color: #e4e7e4; cursor: pointer; }
+.play-button { color: #10231d; border-color: var(--mint); background: var(--mint); }
+.time-readout { min-width: 42px; text-align: right; color: var(--mint); font: 11px 'DM Mono', monospace; }
+.edit-tools { display: flex; align-items: center; gap: 7px; padding: 0 18px 14px; flex-wrap: wrap; }
+.edit-tools > span { margin-right: auto; color: #8d9491; font-size: 10px; }
+.edit-tools button { padding: 6px 8px; min-height: 30px; }
+.edit-tools button:disabled { opacity: .35; cursor: default; }
+.timeline-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; border-top: 1px solid #2a2d30; border-bottom: 1px solid #2a2d30; scrollbar-color: #454b48 #17191c; scrollbar-width: thin; }
+.timeline-inner { position: relative; min-height: 180px; background-image: repeating-linear-gradient(to right, transparent 0, transparent 28px, #24282a 28.5px, transparent 29px); }
+.ruler { height: 28px; position: relative; background: #121416; border-bottom: 1px solid #34383a; }
+.ruler-mark { position: absolute; top: 0; bottom: 0; border-left: 1px solid #3b413e; padding-left: 5px; color: #9ca49f; font: 9px/28px 'DM Mono', monospace; }
+.timeline-track { position: relative; min-height: 76px; border-bottom: 1px solid #2c3031; background-image: repeating-linear-gradient(to right, transparent 0, transparent 28px, #252a28 28.5px, transparent 29px); }
+.track-label { position: sticky; left: 0; z-index: 3; width: 76px; padding: 5px 7px; color: #b7c0bb; font: 9px 'DM Mono', monospace; background: #1b201eeb; border-right: 1px solid #3a423d; border-bottom-right-radius: 5px; pointer-events: none; }
+.timeline-clip { position: absolute; top: 23px; height: 44px; overflow: visible; border: 1px solid #5a8d79; border-radius: 7px; background: #284638; color: #e4fff3; padding: 5px 7px; cursor: pointer; touch-action: manipulation; }
+.timeline-clip.selected { border: 2px solid var(--mint); background: #315844; box-shadow: 0 0 0 2px #9be7cf20; }
+.timeline-clip > strong { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 9px; line-height: 12px; }
+.clip-wave { position: absolute; left: 2px; right: 2px; bottom: 2px; height: 18px; overflow: hidden; opacity: .85; pointer-events: none; }
+.clip-wave .waveform { height: 18px; margin: 0; border-radius: 2px; background: transparent; }
+.clip-nudges { position: absolute; top: -25px; right: -1px; display: flex; gap: 3px; white-space: nowrap; z-index: 4; }
+.clip-nudges button { border: 1px solid #4b6f5f; border-radius: 5px; padding: 3px 5px; background: #111d18; color: var(--mint); font: 9px 'DM Mono', monospace; }
+.playhead { position: absolute; top: 0; bottom: 0; z-index: 5; width: 2px; background: #ff9d73; pointer-events: none; box-shadow: 0 0 8px #ff9d7350; }
+.playhead::before { content: ''; position: absolute; top: 0; left: -4px; width: 10px; height: 7px; background: #ff9d73; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.timeline-hint { margin: 12px 18px 0; color: #858d89; font-size: 10px; line-height: 1.6; }
+@media (max-width: 390px) {
+  .timeline-panel { border-radius: 14px; }
+  .timeline-heading { padding-left: 13px; padding-right: 13px; }
+  .edit-tools { padding-left: 13px; padding-right: 13px; }
+  .transport { gap: 4px; }
+  .transport-button { width: 32px; height: 34px; }
+}
