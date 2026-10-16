@@ -79,6 +79,8 @@ export default function App() {
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
   const [clipboardClip, setClipboardClip] = useState<{ clip: Clip; trackId: string } | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [gridDivision, setGridDivision] = useState(4);
+  const [overlapEnabled, setOverlapEnabled] = useState(true);
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [masterGain, setMasterGain] = useState(0.85);
   const [masterLevel, setMasterLevel] = useState(0);
@@ -387,10 +389,27 @@ export default function App() {
     }
   }
   function nudgeClip(clip: Clip, amount: number) {
-    updateClip(clip.id, { start: Math.max(0, clip.start + amount * BEAT) });
+    updateClip(clip.id, { start: Math.max(0, snapTime(clip.start + amount * BEAT * 4 / gridDivision)) });
   }
   function snapTime(seconds: number) {
-    return snapEnabled ? Math.round(seconds / BEAT) * BEAT : seconds;
+    const gridStep = BEAT * 4 / gridDivision;
+    return snapEnabled ? Math.round(seconds / gridStep) * gridStep : seconds;
+  }
+  function moveStartWithoutOverlap(clipId: string, trackId: string, proposedStart: number, direction: number) {
+    if (overlapEnabled) return Math.max(0, proposedStart);
+    const track = tracksRef.current.find((item) => item.id === trackId);
+    const clip = track?.clips.find((item) => item.id === clipId);
+    if (!track || !clip) return Math.max(0, proposedStart);
+    const duration = clip.sourceEnd - clip.sourceStart;
+    let start = Math.max(0, proposedStart);
+    const others = track.clips.filter((item) => item.id !== clipId).sort((a, b) => a.start - b.start);
+    for (const other of others) {
+      const otherEnd = other.start + other.sourceEnd - other.sourceStart;
+      if (start < otherEnd - 0.001 && start + duration > other.start + 0.001) {
+        start = direction >= 0 ? otherEnd : Math.max(0, other.start - duration);
+      }
+    }
+    return Math.max(0, start);
   }
   function splitSelected() {
     if (!selectedClip) { setStatus("Select a clip first."); return; }
@@ -521,15 +540,15 @@ export default function App() {
             <span className="time-readout">{formatTime(playhead)}</span>
           </div>
         </div>
-        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><button onClick={undoEdit} disabled={undoStackRef.current.length === 0} aria-label="Undo last edit">↶ Undo</button><button onClick={redoEdit} disabled={redoStackRef.current.length === 0} aria-label="Redo last undone edit">↷ Redo</button><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={duplicateSelected} disabled={!selectedClip}>Duplicate</button><button onClick={copySelected} disabled={!selectedClip}>Copy</button><button onClick={pasteClip} disabled={!clipboardClip}>Paste</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
+        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><button onClick={undoEdit} disabled={undoStackRef.current.length === 0} aria-label="Undo last edit">↶ Undo</button><button onClick={redoEdit} disabled={redoStackRef.current.length === 0} aria-label="Redo last undone edit">↷ Redo</button><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><label className="grid-select">Grid<select aria-label="Snap grid division" value={gridDivision} onChange={(event) => setGridDivision(Number(event.currentTarget.value))}><option value={2}>1/2</option><option value={4}>1/4</option><option value={8}>1/8</option><option value={16}>1/16</option><option value={32}>1/32</option></select></label><button className={overlapEnabled ? "tool-active" : ""} aria-pressed={overlapEnabled} onClick={() => setOverlapEnabled((value) => !value)}>Overlap {overlapEnabled ? "On" : "Off"}</button><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={duplicateSelected} disabled={!selectedClip}>Duplicate</button><button onClick={copySelected} disabled={!selectedClip}>Copy</button><button onClick={pasteClip} disabled={!clipboardClip}>Paste</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
         {selectedClip && (() => {
           const selected = tracks.flatMap((track) => track.clips.map((clip) => ({ clip, track }))).find((item) => item.clip.id === selectedClip);
           if (!selected) return null;
           const duration = selected.clip.sourceEnd - selected.clip.sourceStart;
           return <div className="clip-inspector" aria-label="Selected clip settings">
             <strong>Selected clip</strong>
-            <label>Start (sec)<input aria-label="Clip start time in seconds" type="number" min="0" step={snapEnabled ? BEAT : 0.01} value={Number(selected.clip.start.toFixed(3))} onChange={(event) => setSelectedClipTiming(Number(event.currentTarget.value), duration)} /></label>
-            <label>Length (sec)<input aria-label="Clip duration in seconds" type="number" min="0.05" max={selected.clip.sourceEnd - selected.clip.sourceStart + (assets.find((asset) => asset.id === selected.clip.assetId)?.duration ?? 0)} step={snapEnabled ? BEAT : 0.01} value={Number(duration.toFixed(3))} onChange={(event) => setSelectedClipTiming(selected.clip.start, Number(event.currentTarget.value))} /></label>
+            <label>Start (sec)<input aria-label="Clip start time in seconds" type="number" min="0" step={snapEnabled ? BEAT * 4 / gridDivision : 0.01} value={Number(selected.clip.start.toFixed(3))} onChange={(event) => setSelectedClipTiming(Number(event.currentTarget.value), duration)} /></label>
+            <label>Length (sec)<input aria-label="Clip duration in seconds" type="number" min="0.05" max={selected.clip.sourceEnd - selected.clip.sourceStart + (assets.find((asset) => asset.id === selected.clip.assetId)?.duration ?? 0)} step={snapEnabled ? BEAT * 4 / gridDivision : 0.01} value={Number(duration.toFixed(3))} onChange={(event) => setSelectedClipTiming(selected.clip.start, Number(event.currentTarget.value))} /></label>
           </div>;
         })()}
         <div className="timeline-scroll">
@@ -563,7 +582,11 @@ export default function App() {
                     if (!drag || drag.clipId !== clip.id || !event.buttons) return;
                     const delta = (event.clientX - drag.startX) / PX_PER_SECOND;
                     if (Math.abs(event.clientX - drag.startX) > 3) drag.moved = true;
-                    if (drag.mode === "move") updateClip(clip.id, { start: Math.max(0, snapTime(drag.start + delta)) }, false);
+                    if (drag.mode === "move") {
+                      const proposed = Math.max(0, snapTime(drag.start + delta));
+                      const start = moveStartWithoutOverlap(clip.id, drag.fromTrackId, proposed, delta);
+                      updateClip(clip.id, { start }, false);
+                    }
                     else if (drag.mode === "left") {
                       const sourceStart = Math.max(0, Math.min(drag.sourceEnd - .05, snapEnabled ? snapTime(drag.sourceStart + delta) : drag.sourceStart + delta));
                       updateClip(clip.id, { sourceStart, start: Math.max(0, drag.start + sourceStart - drag.sourceStart) }, false);
@@ -584,7 +607,20 @@ export default function App() {
                           if (candidate.id === clip.id) { movedClip = candidate; return false; }
                           return true;
                         }) }));
-                        return without.map((item: Track) => item.id === dropTrack && movedClip ? { ...item, clips: [...item.clips, movedClip] } : item);
+                        return without.map((item: Track) => {
+                          if (item.id !== dropTrack || !movedClip) return item;
+                          let placed = movedClip;
+                          if (!overlapEnabled) {
+                            const duration = placed.sourceEnd - placed.sourceStart;
+                            const conflicts = item.clips.filter((other: Clip) => placed.start < other.start + other.sourceEnd - other.sourceStart - 0.001 && placed.start + duration > other.start + 0.001);
+                            if (conflicts.length) {
+                              const direction = placed.start >= clip.start ? 1 : -1;
+                              const edge = direction >= 0 ? Math.max(...conflicts.map((other: Clip) => other.start + other.sourceEnd - other.sourceStart)) : Math.max(0, Math.min(...conflicts.map((other: Clip) => other.start)) - duration);
+                              placed = { ...placed, start: edge };
+                            }
+                          }
+                          return { ...item, clips: [...item.clips, placed] };
+                        });
                       })();
                       tracksRef.current = nextTracks;
                       setTracks(nextTracks);
@@ -596,14 +632,14 @@ export default function App() {
                   <span className="trim-handle trim-left" data-edge="left" aria-label="Trim clip start" />
                   <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer} /></div>
                   <span className="trim-handle trim-right" data-edge="right" aria-label="Trim clip end" />
-                  {selectedClip === clip.id && <div className="clip-nudges"><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, -1); }}>− beat</button><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, 1); }}>+ beat</button></div>}
+                  {selectedClip === clip.id && <div className="clip-nudges"><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, -1); }}>− grid</button><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, 1); }}>+ grid</button></div>}
                 </div>;
               })}
             </div>)}
             <div className="playhead" style={{ left: playhead * PX_PER_SECOND }} />
           </div>
         </div>
-        <p className="timeline-hint">Horizontal scroll · 4/4 grid · one beat = {BEAT.toFixed(2)}s · {snapEnabled ? "snap to beat enabled" : "free positioning"}. Zoom: {Math.round(timelineZoom * 100)}%.</p>
+        <p className="timeline-hint">Horizontal scroll · 4/4 grid · one beat = {BEAT.toFixed(2)}s · {snapEnabled ? "snap 1/" + gridDivision : "free positioning"} · overlap {overlapEnabled ? "enabled" : "disabled"}. Zoom: {Math.round(timelineZoom * 100)}%.</p>
       </section>
 
       <footer className="footer"><span><span className="live-dot" /> AUDIO ENGINE READY</span><span className="save-indicator">{saveState === "loading" ? "LOADING PROJECT" : saveState === "saving" ? "SAVING LOCALLY…" : saveState === "error" ? "LOCAL SAVE FAILED" : "SAVED ON DEVICE"}</span><span>MADE FOR THE MOMENT</span></footer>
