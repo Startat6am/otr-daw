@@ -206,3 +206,56 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .project-actions { order: 3; width: 100%; }
   .project-name-input { flex: 1; width: 100px; }
 }
+
+
+/* Keep project controls on their own row so the header never collapses */
+.topbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 14px;
+  padding-bottom: 22px;
+}
+.topbar > .brand { grid-column: 1; grid-row: 1; min-width: 0; }
+.topbar > .version-pill { grid-column: 2; grid-row: 1; justify-self: end; }
+.topbar > .project-actions {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.project-name-input { flex: 1 1 180px; width: auto; min-width: 0; }
+.project-icon-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; }
+.project-actions .icon-action {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #414447;
+  border-radius: 9px;
+  background: #1b1d20;
+  color: #e9eae6;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.project-actions .icon-action:hover { border-color: var(--mint); color: var(--mint); background: #202923; }
+.project-actions .icon-action svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.project-load-button { position: relative; overflow: hidden; }
+.project-load-button input { position: absolute; inset: 0; display: block; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+@media (max-width: 420px) {
+  .topbar { column-gap: 8px; row-gap: 12px; }
+  .brand { gap: 7px; font-size: 15px; }
+  .brand-mark { width: 32px; height: 30px; }
+  .version-pill { padding: 6px 7px; font-size: 9px; }
+  .topbar > .project-actions { gap: 6px; }
+  .project-name-input { flex-basis: 0; padding: 8px; }
+  .project-icon-actions { gap: 5px; }
+  .project-actions .icon-action { flex-basis: 36px; width: 36px; height: 38px; }
+}
