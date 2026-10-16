@@ -77,6 +77,7 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
+  const [clipboardClip, setClipboardClip] = useState<{ clip: Clip; trackId: string } | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [masterGain, setMasterGain] = useState(0.85);
@@ -418,6 +419,47 @@ export default function App() {
     setStatus("Clip removed from the timeline.");
   }
 
+  function findSelectedClip() {
+    for (const track of tracksRef.current) {
+      const clip = track.clips.find((item) => item.id === selectedClip);
+      if (clip) return { clip, trackId: track.id };
+    }
+    return null;
+  }
+  function duplicateSelected() {
+    const selected = findSelectedClip();
+    if (!selected) return;
+    const duration = selected.clip.sourceEnd - selected.clip.sourceStart;
+    const duplicate = { ...selected.clip, id: uid(), start: snapTime(selected.clip.start + duration) };
+    commitTracks((current) => current.map((track) => track.id === selected.trackId ? { ...track, clips: [...track.clips, duplicate] } : track));
+    setSelectedClip(duplicate.id);
+    setStatus("Clip duplicated after the original.");
+  }
+  function copySelected() {
+    const selected = findSelectedClip();
+    if (!selected) return;
+    setClipboardClip({ clip: { ...selected.clip }, trackId: selected.trackId });
+    setStatus("Clip copied. Move the playhead and tap Paste.");
+  }
+  function pasteClip() {
+    if (!clipboardClip) return;
+    const targetTrack = tracksRef.current.find((track) => track.id === clipboardClip.trackId) ?? tracksRef.current[0];
+    if (!targetTrack) return;
+    const pasted = { ...clipboardClip.clip, id: uid(), start: snapTime(playhead) };
+    commitTracks((current) => current.map((track) => track.id === targetTrack.id ? { ...track, clips: [...track.clips, pasted] } : track));
+    setSelectedClip(pasted.id);
+    setStatus("Clip pasted at the playhead.");
+  }
+  function setSelectedClipTiming(start: number, duration: number) {
+    const selected = findSelectedClip();
+    if (!selected) return;
+    const asset = assets.find((item) => item.id === selected.clip.assetId);
+    if (!asset) return;
+    const safeStart = Math.max(0, Number.isFinite(start) ? start : 0);
+    const safeDuration = Math.max(0.05, Math.min(asset.duration - selected.clip.sourceStart, Number.isFinite(duration) ? duration : 0.05));
+    updateClip(selected.clip.id, { start: safeStart, sourceEnd: selected.clip.sourceStart + safeDuration });
+  }
+
   const maxEnd = Math.max(16, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clip.sourceEnd - clip.sourceStart + 2)));
   const timelineWidth = maxEnd * PX_PER_SECOND;
   const rulerCount = Math.ceil(maxEnd / 2);
@@ -479,7 +521,17 @@ export default function App() {
             <span className="time-readout">{formatTime(playhead)}</span>
           </div>
         </div>
-        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><button onClick={undoEdit} disabled={undoStackRef.current.length === 0} aria-label="Undo last edit">↶ Undo</button><button onClick={redoEdit} disabled={redoStackRef.current.length === 0} aria-label="Redo last undone edit">↷ Redo</button><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
+        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><button onClick={undoEdit} disabled={undoStackRef.current.length === 0} aria-label="Undo last edit">↶ Undo</button><button onClick={redoEdit} disabled={redoStackRef.current.length === 0} aria-label="Redo last undone edit">↷ Redo</button><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={duplicateSelected} disabled={!selectedClip}>Duplicate</button><button onClick={copySelected} disabled={!selectedClip}>Copy</button><button onClick={pasteClip} disabled={!clipboardClip}>Paste</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
+        {selectedClip && (() => {
+          const selected = tracks.flatMap((track) => track.clips.map((clip) => ({ clip, track }))).find((item) => item.clip.id === selectedClip);
+          if (!selected) return null;
+          const duration = selected.clip.sourceEnd - selected.clip.sourceStart;
+          return <div className="clip-inspector" aria-label="Selected clip settings">
+            <strong>Selected clip</strong>
+            <label>Start (sec)<input aria-label="Clip start time in seconds" type="number" min="0" step={snapEnabled ? BEAT : 0.01} value={Number(selected.clip.start.toFixed(3))} onChange={(event) => setSelectedClipTiming(Number(event.currentTarget.value), duration)} /></label>
+            <label>Length (sec)<input aria-label="Clip duration in seconds" type="number" min="0.05" max={selected.clip.sourceEnd - selected.clip.sourceStart + (assets.find((asset) => asset.id === selected.clip.assetId)?.duration ?? 0)} step={snapEnabled ? BEAT : 0.01} value={Number(duration.toFixed(3))} onChange={(event) => setSelectedClipTiming(selected.clip.start, Number(event.currentTarget.value))} /></label>
+          </div>;
+        })()}
         <div className="timeline-scroll">
           <div className="timeline-inner" style={{ width: timelineWidth }}>
             <div className="ruler" style={{ width: timelineWidth }} onPointerDown={(event) => {
