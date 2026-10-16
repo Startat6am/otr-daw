@@ -12,9 +12,10 @@ type ImportedAudio = {
 };
 type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number; fadeIn?: number; fadeOut?: number };
 type Track = { id: string; name: string; clips: Clip[]; gain: number; muted: boolean; solo: boolean };
-const BPM = 120;
+const DEFAULT_BPM = 120;
+const MIN_BPM = 40;
+const MAX_BPM = 240;
 const BASE_PX_PER_SECOND = 58;
-const BEAT = 60 / BPM;
 const INITIAL_TRACKS: Track[] = [
   { id: "track-1", name: "Track 1", clips: [], gain: 1, muted: false, solo: false },
   { id: "track-2", name: "Track 2", clips: [], gain: 1, muted: false, solo: false },
@@ -74,6 +75,8 @@ function ClipWaveform({ buffer, sourceStart, sourceEnd }: { buffer: AudioBuffer;
 
 export default function App() {
   const [assets, setAssets] = useState<ImportedAudio[]>([]);
+  const [bpm, setBpm] = useState(DEFAULT_BPM);
+  const BEAT = 60 / bpm;
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [status, setStatus] = useState("Import audio, add it to a track, then press play.");
   const [busy, setBusy] = useState(false);
@@ -160,6 +163,7 @@ export default function App() {
           tracksRef.current = restoredTracks;
           setTracks(restoredTracks);
           setSnapEnabled(saved.settings.snapEnabled);
+          setBpm(typeof saved.settings.bpm === "number" ? Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(saved.settings.bpm))) : DEFAULT_BPM);
           setTimelineZoom(saved.settings.timelineZoom);
           const restoredMaster = typeof saved.settings.masterGain === "number" ? Math.max(0, Math.min(1, saved.settings.masterGain)) : 0.85;
           masterGainRef.current = restoredMaster;
@@ -187,7 +191,7 @@ export default function App() {
         updatedAt: new Date().toISOString(),
         assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: asset.audioData })),
         tracks,
-        settings: { snapEnabled, timelineZoom, masterGain },
+        settings: { snapEnabled, timelineZoom, masterGain, bpm },
       };
       void saveProject(project).then(() => setSaveState("saved")).catch((error: unknown) => {
         console.error("Could not save project", error);
@@ -195,7 +199,7 @@ export default function App() {
       });
     }, 450);
     return () => { if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current); };
-  }, [assets, tracks, snapEnabled, timelineZoom, masterGain, persistenceReady]);
+  }, [assets, tracks, snapEnabled, timelineZoom, masterGain, bpm, persistenceReady]);
 
   function getContext() {
     if (!contextRef.current) contextRef.current = new AudioContext();
@@ -560,14 +564,14 @@ export default function App() {
 
       <section className="timeline-panel" aria-label="Multitrack timeline">
         <div className="timeline-heading">
-          <div><p className="eyebrow">ARRANGEMENT</p><h2>Timeline <span className="count">{BPM} BPM</span></h2></div>
+          <div><p className="eyebrow">ARRANGEMENT</p><h2>Timeline <span className="count">{bpm} BPM</span></h2></div>
           <div className="transport">
             <button className="transport-button" onClick={stopTransport} aria-label="Stop playback">■</button>
             <button className="transport-button play-button" onClick={() => void toggleTransport()} aria-label={isPlaying ? "Pause playback" : "Start playback"}>{isPlaying ? "Ⅱ" : "▶"}</button>
             <span className="time-readout">{formatTime(playhead)}</span>
           </div>
         </div>
-        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><button onClick={undoEdit} disabled={undoStackRef.current.length === 0} aria-label="Undo last edit">↶ Undo</button><button onClick={redoEdit} disabled={redoStackRef.current.length === 0} aria-label="Redo last undone edit">↷ Redo</button><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><label className="grid-select">Grid<select aria-label="Snap grid division" value={gridDivision} onChange={(event) => setGridDivision(Number(event.currentTarget.value))}><option value={2}>1/2</option><option value={4}>1/4</option><option value={8}>1/8</option><option value={16}>1/16</option><option value={32}>1/32</option></select></label><button className={overlapEnabled ? "tool-active" : ""} aria-pressed={overlapEnabled} onClick={() => setOverlapEnabled((value) => !value)}>Overlap {overlapEnabled ? "On" : "Off"}</button><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={duplicateSelected} disabled={!selectedClip}>Duplicate</button><button onClick={copySelected} disabled={!selectedClip}>Copy</button><button onClick={pasteClip} disabled={!clipboardClip}>Paste</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
+        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><label className="bpm-control">BPM<input aria-label="Project tempo in beats per minute" type="number" min={MIN_BPM} max={MAX_BPM} step="1" value={bpm} onChange={(event) => { const value = Number(event.currentTarget.value); if (Number.isFinite(value) && value >= MIN_BPM && value <= MAX_BPM) setBpm(Math.round(value)); }} onBlur={(event) => { const value = Number(event.currentTarget.value); setBpm(Number.isFinite(value) ? Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(value))) : DEFAULT_BPM); }} /></label><button onClick={undoEdit} disabled={undoStackRef.current.length === 0} aria-label="Undo last edit">↶ Undo</button><button onClick={redoEdit} disabled={redoStackRef.current.length === 0} aria-label="Redo last undone edit">↷ Redo</button><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><label className="grid-select">Grid<select aria-label="Snap grid division" value={gridDivision} onChange={(event) => setGridDivision(Number(event.currentTarget.value))}><option value={2}>1/2</option><option value={4}>1/4</option><option value={8}>1/8</option><option value={16}>1/16</option><option value={32}>1/32</option></select></label><button className={overlapEnabled ? "tool-active" : ""} aria-pressed={overlapEnabled} onClick={() => setOverlapEnabled((value) => !value)}>Overlap {overlapEnabled ? "On" : "Off"}</button><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={duplicateSelected} disabled={!selectedClip}>Duplicate</button><button onClick={copySelected} disabled={!selectedClip}>Copy</button><button onClick={pasteClip} disabled={!clipboardClip}>Paste</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
         {selectedClip && (() => {
           const selected = tracks.flatMap((track) => track.clips.map((clip) => ({ clip, track }))).find((item) => item.clip.id === selectedClip);
           if (!selected) return null;
