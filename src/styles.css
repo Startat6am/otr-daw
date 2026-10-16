@@ -185,3 +185,12 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 .grid-select select { min-height: 24px; border: 1px solid #39423d; border-radius: 5px; padding: 2px 5px; background: #202522; color: var(--mint); font: 10px 'DM Mono', monospace; }
 .timeline-clip { background: #284638e8; }
 .timeline-clip.selected { background: #315844f2; }
+
+
+/* Non-destructive clip fades */
+.fade-shade { position: absolute; top: 0; bottom: 0; z-index: 2; pointer-events: none; background: linear-gradient(180deg, #baf7df22, #9be7cf66); }
+.fade-in-shade { left: 0; clip-path: polygon(0 100%, 100% 0, 100% 100%); border-bottom-left-radius: 5px; }
+.fade-out-shade { right: 0; clip-path: polygon(0 0, 100% 100%, 0 100%); border-bottom-right-radius: 5px; }
+.fade-handle { position: absolute; top: 1px; z-index: 4; width: 12px; height: 12px; border: 2px solid #0e1813; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 1px #b6f4dc; transform: translateX(-50%); cursor: ew-resize; touch-action: none; }
+.fade-in-handle { margin-left: 0; }
+.fade-out-handle { transform: translateX(50%); }
