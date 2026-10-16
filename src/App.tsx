@@ -206,7 +206,7 @@ export default function App() {
       masterNodeRef.current = master;
       analyserRef.current = analyser;
     }
-    const soloActive = currentTracks.some((track) => track.solo && !track.muted);
+    const soloActive = currentTracks.some((track) => track.solo);
     currentTracks.forEach((track) => {
       let node = mixerNodesRef.current.get(track.id);
       if (!node || node.context !== context) {
@@ -263,11 +263,10 @@ export default function App() {
       const duration = clip.sourceEnd - offset;
       if (duration <= 0) return;
       const source = context.createBufferSource();
-      const gain = context.createGain();
       source.buffer = asset.buffer;
-      gain.gain.value = track.gain;
-      source.connect(gain);
-      gain.connect(context.destination);
+      const trackGain = mixerNodesRef.current.get(track.id);
+      if (!trackGain) return;
+      source.connect(trackGain);
       sourcesRef.current.push(source);
       source.start(startAt + Math.max(0, clip.start - position), offset, duration);
     }));
