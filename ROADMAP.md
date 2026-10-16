@@ -2,8 +2,8 @@
 
 > Living checklist for the mobile-first audio workstation. Update this file whenever a milestone lands.
 >
-> **Current milestone:** Phase 3 — Touch editing  
-> **Last updated:** 2026-10-15
+> **Current milestone:** Phase 4 — Project persistence  
+> **Last updated:** 2026-10-16
 
 ## Status legend
 
@@ -49,15 +49,15 @@
 - [ ] Improve selected-clip controls for small screens
 - [x] Add undo/redo for clip editing operations
 
-**Progress:** Basic drag, cross-track move, trim handles, beat snapping toggle and timeline zoom (50–200%) are implemented. Device testing, selected-clip mobile polish and full device testing remain open. Undo/redo now stores up to 100 edit snapshots.
+**Progress:** Basic drag, cross-track move, trim handles, beat snapping toggle and timeline zoom (50–200%) are implemented. Undo/redo stores up to 100 edit snapshots. Phase 4 now auto-saves the current session and imported audio to device-local IndexedDB and restores it on reload. Project create/rename/delete UI and broader migration handling remain open.
 
 **Definition of done:** On a phone, a user can import audio, move and trim clips, align them to the beat, split them, and play the arrangement reliably.
 
 ## Phase 4 — Project persistence
 
-- [ ] Define a serializable project format (metadata, tracks, clips, tempo and settings)
-- [ ] Store audio assets and project data in IndexedDB
-- [ ] Restore the last session after reload
+- [x] Define a serializable, versioned project format (metadata, tracks, clips and settings)
+- [x] Store audio assets and project data in IndexedDB
+- [x] Restore the last session after reload
 - [ ] Create, rename and delete projects
 - [ ] Handle missing or unsupported assets gracefully
 - [ ] Add project schema versioning for future migrations
