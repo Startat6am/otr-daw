@@ -306,11 +306,19 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying) { setMasterLevel(0); return; }
     let frame = 0;
     const tick = () => {
       const context = contextRef.current;
       if (context && playingRef.current) {
+        const analyser = analyserRef.current;
+        if (analyser) {
+          const samples = new Uint8Array(analyser.fftSize);
+          analyser.getByteTimeDomainData(samples);
+          let sum = 0;
+          for (const sample of samples) { const normalized = (sample - 128) / 128; sum += normalized * normalized; }
+          setMasterLevel(Math.min(1, Math.sqrt(sum / samples.length) * 3.5));
+        }
         const position = Math.max(0, context.currentTime - clockStartRef.current + playheadRef.current);
         setPlayhead(position);
         const end = Math.max(0, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clip.sourceEnd - clip.sourceStart)));
