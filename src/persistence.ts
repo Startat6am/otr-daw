@@ -8,13 +8,13 @@ export type SavedAsset = {
 };
 
 export type SavedClip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number };
-export type SavedTrack = { id: string; name: string; clips: SavedClip[]; gain: number };
+export type SavedTrack = { id: string; name: string; clips: SavedClip[]; gain: number; muted?: boolean; solo?: boolean };
 export type SavedProject = {
   schemaVersion: 1;
   updatedAt: string;
   assets: SavedAsset[];
   tracks: SavedTrack[];
-  settings: { snapEnabled: boolean; timelineZoom: number };
+  settings: { snapEnabled: boolean; timelineZoom: number; masterGain?: number };
 };
 
 const DB_NAME = "on-the-run-daw";
