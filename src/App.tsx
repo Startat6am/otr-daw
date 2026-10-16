@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { loadSavedProject, saveProject, type SavedProject } from "./persistence";
 
 type ImportedAudio = {
   id: string;
@@ -7,6 +8,7 @@ type ImportedAudio = {
   sampleRate: number;
   channels: number;
   buffer: AudioBuffer;
+  audioData: ArrayBuffer;
 };
 type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number };
 type Track = { id: string; name: string; clips: Clip[]; gain: number };
@@ -78,6 +80,9 @@ export default function App() {
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [, setHistoryVersion] = useState(0);
+  const [persistenceReady, setPersistenceReady] = useState(false);
+  const [saveState, setSaveState] = useState<"loading" | "saved" | "saving" | "error">("loading");
+  const saveTimerRef = useRef<number | null>(null);
   const tracksRef = useRef<Track[]>(INITIAL_TRACKS);
   const undoStackRef = useRef<Track[][]>([]);
   const redoStackRef = useRef<Track[][]>([]);
@@ -118,6 +123,64 @@ export default function App() {
     setHistoryVersion((version) => version + 1);
     setStatus("Redo: edit restored.");
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    async function restoreProject() {
+      try {
+        const saved = await loadSavedProject();
+        if (cancelled) return;
+        if (saved) {
+          const context = getContext();
+          const restoredAssets: ImportedAudio[] = [];
+          for (const item of saved.assets) {
+            try {
+              const audioData = item.audioData.slice(0);
+              const buffer = await context.decodeAudioData(audioData.slice(0));
+              restoredAssets.push({ ...item, audioData, buffer, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels });
+            } catch {
+              // Keep the rest of the project available if one stored audio file is no longer decodable.
+            }
+          }
+          if (cancelled) return;
+          const restoredTracks = saved.tracks.map((track) => ({ ...track, clips: track.clips.filter((clip) => restoredAssets.some((asset) => asset.id === clip.assetId)) }));
+          setAssets(restoredAssets);
+          tracksRef.current = restoredTracks;
+          setTracks(restoredTracks);
+          setSnapEnabled(saved.settings.snapEnabled);
+          setTimelineZoom(saved.settings.timelineZoom);
+          setStatus(restoredAssets.length < saved.assets.length ? "Project restored. Some audio assets could not be decoded." : "Project restored from this device.");
+        }
+      } catch (error) {
+        console.error("Could not restore project", error);
+        if (!cancelled) setStatus("Local project storage is unavailable in this browser.");
+      } finally {
+        if (!cancelled) { setPersistenceReady(true); setSaveState("saved"); }
+      }
+    }
+    void restoreProject();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!persistenceReady) return;
+    setSaveState("saving");
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      const project: SavedProject = {
+        schemaVersion: 1,
+        updatedAt: new Date().toISOString(),
+        assets: assets.map(({ buffer: _buffer, ...asset }) => asset),
+        tracks,
+        settings: { snapEnabled, timelineZoom },
+      };
+      void saveProject(project).then(() => setSaveState("saved")).catch((error: unknown) => {
+        console.error("Could not save project", error);
+        setSaveState("error");
+      });
+    }, 450);
+    return () => { if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current); };
+  }, [assets, tracks, snapEnabled, timelineZoom, persistenceReady]);
 
   function getContext() {
     if (!contextRef.current) contextRef.current = new AudioContext();
@@ -241,8 +304,9 @@ export default function App() {
       const imported: ImportedAudio[] = [];
       for (const file of Array.from(files)) {
         if (!/\.(wav|mp3|ogg|oga)$/i.test(file.name) && !file.type.startsWith("audio/")) continue;
-        const buffer = await context.decodeAudioData(await file.arrayBuffer());
-        imported.push({ id: uid(), name: file.name, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, buffer });
+        const audioData = await file.arrayBuffer();
+        const buffer = await context.decodeAudioData(audioData.slice(0));
+        imported.push({ id: uid(), name: file.name, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, buffer, audioData });
       }
       if (!imported.length) setStatus("No supported audio files found. Choose WAV, MP3 or OGG.");
       else {
@@ -426,7 +490,7 @@ export default function App() {
         <p className="timeline-hint">Horizontal scroll · 4/4 grid · one beat = {BEAT.toFixed(2)}s · {snapEnabled ? "snap to beat enabled" : "free positioning"}. Zoom: {Math.round(timelineZoom * 100)}%.</p>
       </section>
 
-      <footer className="footer"><span><span className="live-dot" /> AUDIO ENGINE READY</span><span>MADE FOR THE MOMENT</span></footer>
+      <footer className="footer"><span><span className="live-dot" /> AUDIO ENGINE READY</span><span className="save-indicator">{saveState === "loading" ? "LOADING PROJECT" : saveState === "saving" ? "SAVING LOCALLY…" : saveState === "error" ? "LOCAL SAVE FAILED" : "SAVED ON DEVICE"}</span><span>MADE FOR THE MOMENT</span></footer>
     </main>
   );
 }
