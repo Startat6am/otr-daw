@@ -170,7 +170,7 @@ export default function App() {
       const project: SavedProject = {
         schemaVersion: 1,
         updatedAt: new Date().toISOString(),
-        assets: assets.map(({ buffer: _buffer, ...asset }) => asset),
+        assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: asset.audioData })),
         tracks,
         settings: { snapEnabled, timelineZoom },
       };
