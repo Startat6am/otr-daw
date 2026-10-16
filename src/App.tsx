@@ -29,6 +29,22 @@ function formatTime(seconds: number) {
 }
 function uid() { return crypto.randomUUID(); }
 
+function bufferToBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+  }
+  return btoa(binary);
+}
+function base64ToBuffer(value: string) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
 function Waveform({ buffer, sourceStart = 0, sourceEnd = buffer.duration }: { buffer: AudioBuffer; sourceStart?: number; sourceEnd?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -75,6 +91,7 @@ function ClipWaveform({ buffer, sourceStart, sourceEnd }: { buffer: AudioBuffer;
 
 export default function App() {
   const [assets, setAssets] = useState<ImportedAudio[]>([]);
+  const [projectName, setProjectName] = useState("Untitled project");
   const [bpm, setBpm] = useState(DEFAULT_BPM);
   const BEAT = 60 / bpm;
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
@@ -200,6 +217,103 @@ export default function App() {
     }, 450);
     return () => { if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current); };
   }, [assets, tracks, snapEnabled, timelineZoom, masterGain, bpm, persistenceReady]);
+
+
+  async function createNewProject() {
+    if ((assets.length || tracks.some((track) => track.clips.length)) && !window.confirm("Create a new project? Export or save your current project first if you want to keep it.")) return;
+    stopTransport();
+    setAssets([]);
+    const freshTracks = INITIAL_TRACKS.map((track) => ({ ...track, id: uid(), clips: [] }));
+    tracksRef.current = freshTracks;
+    setTracks(freshTracks);
+    setProjectName("Untitled project");
+    setBpm(DEFAULT_BPM);
+    setSnapEnabled(true);
+    setGridDivision(4);
+    setOverlapEnabled(true);
+    setTimelineZoom(1);
+    masterGainRef.current = 0.85;
+    setMasterGain(0.85);
+    setPlayhead(0);
+    playheadRef.current = 0;
+    setSelectedClip(null);
+    setClipboardClip(null);
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setHistoryVersion((version) => version + 1);
+    setStatus("New project created.");
+  }
+
+  async function saveProjectFile() {
+    try {
+      const project = {
+        schemaVersion: 1,
+        updatedAt: new Date().toISOString(),
+        projectName: projectName.trim() || "Untitled project",
+        assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: bufferToBase64(asset.audioData) })),
+        tracks,
+        settings: { snapEnabled, timelineZoom, masterGain, bpm },
+      };
+      const blob = new Blob([JSON.stringify(project)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      const safeName = (project.projectName || "project").replace(/[^a-z0-9-_ ]/gi, "").trim().replace(/\s+/g, "-") || "project";
+      anchor.download = safeName + ".otr.json";
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setStatus("Project saved to a file.");
+    } catch (error) {
+      console.error("Could not save project file", error);
+      setStatus("Could not save project file.");
+    }
+  }
+
+  async function loadProjectFile(file: File) {
+    try {
+      const parsed = JSON.parse(await file.text()) as any;
+      if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.assets) || !Array.isArray(parsed.tracks) || !parsed.settings) {
+        throw new Error("Invalid project file");
+      }
+      const context = getContext();
+      const restoredAssets: ImportedAudio[] = [];
+      for (const item of parsed.assets) {
+        if (typeof item.audioData !== "string") throw new Error("Project audio data is missing");
+        const audioData = base64ToBuffer(item.audioData);
+        const buffer = await context.decodeAudioData(audioData.slice(0));
+        restoredAssets.push({ ...item, audioData, buffer, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels });
+      }
+      const restoredTracks: Track[] = parsed.tracks.map((track: Track) => ({
+        ...track,
+        gain: Number.isFinite(track.gain) ? track.gain : 1,
+        muted: Boolean(track.muted),
+        solo: Boolean(track.solo),
+        clips: track.clips.filter((clip) => restoredAssets.some((asset) => asset.id === clip.assetId)),
+      }));
+      stopTransport();
+      setAssets(restoredAssets);
+      tracksRef.current = restoredTracks;
+      setTracks(restoredTracks);
+      setProjectName(parsed.projectName || file.name.replace(/\.otr\.json$/i, "") || "Imported project");
+      setBpm(typeof parsed.settings.bpm === "number" ? Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(parsed.settings.bpm))) : DEFAULT_BPM);
+      setSnapEnabled(Boolean(parsed.settings.snapEnabled));
+      setTimelineZoom(typeof parsed.settings.timelineZoom === "number" ? Math.max(.5, Math.min(2, parsed.settings.timelineZoom)) : 1);
+      const restoredMaster = typeof parsed.settings.masterGain === "number" ? Math.max(0, Math.min(1, parsed.settings.masterGain)) : 0.85;
+      masterGainRef.current = restoredMaster;
+      setMasterGain(restoredMaster);
+      setPlayhead(0);
+      playheadRef.current = 0;
+      setSelectedClip(null);
+      setClipboardClip(null);
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      setHistoryVersion((version) => version + 1);
+      setStatus("Project loaded.");
+    } catch (error) {
+      console.error("Could not load project file", error);
+      setStatus("Could not load project. Check that this is a valid .otr.json file.");
+    }
+  }
 
   function getContext() {
     if (!contextRef.current) contextRef.current = new AudioContext();
@@ -518,6 +632,12 @@ export default function App() {
     <main className="app-shell">
       <header className="topbar">
         <a className="brand" href="/" aria-label="On The Run home"><span className="brand-mark">OTR</span><span>on the run<span className="brand-dot">.</span></span></a>
+        <div className="project-actions">
+          <input className="project-name-input" aria-label="Project name" value={projectName} onChange={(event) => setProjectName(event.currentTarget.value)} />
+          <button onClick={() => void createNewProject()}>New project</button>
+          <button onClick={() => void saveProjectFile()}>Save project</button>
+          <label className="project-load-button">Load project<input aria-label="Load project file" type="file" accept=".json,.otr.json,application/json" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void loadProjectFile(file); event.currentTarget.value = ""; }} /></label>
+        </div>
         <span className="version-pill">EARLY ACCESS · 0.2</span>
       </header>
 
