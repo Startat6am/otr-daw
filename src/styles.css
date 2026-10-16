@@ -135,3 +135,28 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 
 .save-indicator { color: var(--mint); }
 @media (max-width: 520px) { .footer { flex-wrap: wrap; } .save-indicator { order: 3; width: 100%; } }
+
+/* Compact touch-first mixer */
+.mixer-panel { margin-top: 18px; padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(145deg, #191b1e, #141517 72%); }
+.mixer-heading { margin-bottom: 15px; }
+.master-meter { height: 8px; width: 76px; overflow: hidden; border-radius: 99px; background: #303532; }
+.master-meter span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6cbda3 0%, var(--mint) 75%, #ffb36e 100%); transition: width .08s linear; }
+.mixer-channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 9px; }
+.mixer-channel { min-width: 0; padding: 12px 10px; border: 1px solid #303438; border-radius: 12px; background: #121416; }
+.channel-top { display: flex; align-items: center; gap: 7px; min-width: 0; margin-bottom: 14px; }
+.channel-top strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.channel-index, .master-mark { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; border-radius: 7px; background: #24362f; color: var(--mint); font: 10px 'DM Mono', monospace; }
+.master-mark { background: #3a3025; color: #ffca91; }
+.channel-db { margin-left: auto; color: #9ba39f; white-space: nowrap; font: 9px 'DM Mono', monospace; }
+.volume-control { display: grid; grid-template-columns: 27px minmax(30px, 1fr) 33px; align-items: center; gap: 5px; color: #8f9993; font: 9px 'DM Mono', monospace; }
+.volume-control input { min-width: 0; width: 100%; accent-color: var(--mint); }
+.volume-control output { text-align: right; color: #c8d3cd; }
+.channel-buttons { display: flex; gap: 6px; margin-top: 12px; }
+.channel-buttons button { flex: 1; min-height: 32px; border: 1px solid #343a37; border-radius: 7px; background: #202321; color: #a9b0ac; font: 10px 'DM Mono', monospace; touch-action: manipulation; }
+.channel-buttons button.channel-active { border-color: #d98c70; background: #422c26; color: #ffc1a5; }
+.channel-buttons button.solo-active { border-color: var(--mint); background: #263f34; color: var(--mint); }
+.channel-muted { opacity: .75; }
+.master-channel { border-color: #62513d; background: #1d1915; }
+.large-meter { width: 100%; margin-top: 13px; height: 10px; }
+.mixer-note { margin: 12px 1px 0; color: #858d89; font-size: 10px; line-height: 1.6; }
+@media (max-width: 390px) { .mixer-panel { padding: 14px; } .mixer-channels { grid-template-columns: repeat(2, minmax(0, 1fr)); } .master-channel { grid-column: 1 / -1; } }
