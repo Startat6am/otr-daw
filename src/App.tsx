@@ -11,13 +11,13 @@ type ImportedAudio = {
   audioData: ArrayBuffer;
 };
 type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number };
-type Track = { id: string; name: string; clips: Clip[]; gain: number };
+type Track = { id: string; name: string; clips: Clip[]; gain: number; muted: boolean; solo: boolean };
 const BPM = 120;
 const BASE_PX_PER_SECOND = 58;
 const BEAT = 60 / BPM;
 const INITIAL_TRACKS: Track[] = [
-  { id: "track-1", name: "Track 1", clips: [], gain: 1 },
-  { id: "track-2", name: "Track 2", clips: [], gain: 1 },
+  { id: "track-1", name: "Track 1", clips: [], gain: 1, muted: false, solo: false },
+  { id: "track-2", name: "Track 2", clips: [], gain: 1, muted: false, solo: false },
 ];
 
 function formatTime(seconds: number) {
@@ -79,6 +79,12 @@ export default function App() {
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [timelineZoom, setTimelineZoom] = useState(1);
+  const [masterGain, setMasterGain] = useState(0.85);
+  const [masterLevel, setMasterLevel] = useState(0);
+  const masterGainRef = useRef(0.85);
+  const mixerNodesRef = useRef<Map<string, GainNode>>(new Map());
+  const masterNodeRef = useRef<GainNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const [, setHistoryVersion] = useState(0);
   const [persistenceReady, setPersistenceReady] = useState(false);
   const [saveState, setSaveState] = useState<"loading" | "saved" | "saving" | "error">("loading");
@@ -143,12 +149,15 @@ export default function App() {
             }
           }
           if (cancelled) return;
-          const restoredTracks = saved.tracks.map((track) => ({ ...track, clips: track.clips.filter((clip) => restoredAssets.some((asset) => asset.id === clip.assetId)) }));
+          const restoredTracks = saved.tracks.map((track) => ({ ...track, gain: Number.isFinite(track.gain) ? track.gain : 1, muted: Boolean(track.muted), solo: Boolean(track.solo), clips: track.clips.filter((clip) => restoredAssets.some((asset) => asset.id === clip.assetId)) }));
           setAssets(restoredAssets);
           tracksRef.current = restoredTracks;
           setTracks(restoredTracks);
           setSnapEnabled(saved.settings.snapEnabled);
           setTimelineZoom(saved.settings.timelineZoom);
+          const restoredMaster = typeof saved.settings.masterGain === "number" ? Math.max(0, Math.min(1, saved.settings.masterGain)) : 0.85;
+          masterGainRef.current = restoredMaster;
+          setMasterGain(restoredMaster);
           setStatus(restoredAssets.length < saved.assets.length ? "Project restored. Some audio assets could not be decoded." : "Project restored from this device.");
         }
       } catch (error) {
@@ -172,7 +181,7 @@ export default function App() {
         updatedAt: new Date().toISOString(),
         assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: asset.audioData })),
         tracks,
-        settings: { snapEnabled, timelineZoom },
+        settings: { snapEnabled, timelineZoom, masterGain },
       };
       void saveProject(project).then(() => setSaveState("saved")).catch((error: unknown) => {
         console.error("Could not save project", error);
@@ -180,11 +189,46 @@ export default function App() {
       });
     }, 450);
     return () => { if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current); };
-  }, [assets, tracks, snapEnabled, timelineZoom, persistenceReady]);
+  }, [assets, tracks, snapEnabled, timelineZoom, masterGain, persistenceReady]);
 
   function getContext() {
     if (!contextRef.current) contextRef.current = new AudioContext();
     return contextRef.current;
+  }
+  function ensureMixer(context: AudioContext, currentTracks: Track[]) {
+    if (!masterNodeRef.current || masterNodeRef.current.context !== context) {
+      const master = context.createGain();
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 256;
+      master.gain.value = masterGainRef.current;
+      master.connect(analyser);
+      analyser.connect(context.destination);
+      masterNodeRef.current = master;
+      analyserRef.current = analyser;
+    }
+    const soloActive = currentTracks.some((track) => track.solo && !track.muted);
+    currentTracks.forEach((track) => {
+      let node = mixerNodesRef.current.get(track.id);
+      if (!node || node.context !== context) {
+        node = context.createGain();
+        node.connect(masterNodeRef.current!);
+        mixerNodesRef.current.set(track.id, node);
+      }
+      const audible = !track.muted && (!soloActive || track.solo);
+      node.gain.setTargetAtTime(audible ? track.gain : 0, context.currentTime, 0.015);
+    });
+  }
+  function changeTrack(trackId: string, change: Partial<Pick<Track, "gain" | "muted" | "solo">>) {
+    const next = tracksRef.current.map((track) => track.id === trackId ? { ...track, ...change } : track);
+    tracksRef.current = next;
+    setTracks(next);
+    if (contextRef.current) ensureMixer(contextRef.current, next);
+  }
+  function setMaster(value: number) {
+    const next = Math.max(0, Math.min(1, value));
+    masterGainRef.current = next;
+    setMasterGain(next);
+    if (masterNodeRef.current && contextRef.current) masterNodeRef.current.gain.setTargetAtTime(next, contextRef.current.currentTime, 0.015);
   }
   function stopSources() {
     sourcesRef.current.forEach((source) => { try { source.stop(); } catch { /* already ended */ } });
@@ -204,7 +248,7 @@ export default function App() {
   }
   function scheduleFrom(position: number, context: AudioContext) {
     stopSources();
-    const startAt = context.currentTime + .08;
+    ensureMixer(context, tracksRef.current);\n    const startAt = context.currentTime + .08;
     clockStartRef.current = startAt;
     playheadRef.current = position;
     tracks.forEach((track) => track.clips.forEach((clip) => {
@@ -406,7 +450,7 @@ export default function App() {
         ))}</div> : <div className="empty-state"><div className="empty-graphic" aria-hidden="true">{Array.from({length: 9}, (_, i) => <span key={i} />)}</div><strong>Your next idea starts here</strong><p>Import a sound, then add it to any track.</p></div>}
       </section>
 
-      <section className="timeline-panel" aria-label="Multitrack timeline">
+      <section className="mixer-panel" aria-label="Audio mixer">\n        <div className="section-heading mixer-heading"><div><p className="eyebrow">LEVELS & CONTROL</p><h2>Mixer <span className="count">{tracks.length} tracks</span></h2></div><div className="master-meter" aria-label={`Master signal ${Math.round(masterLevel * 100)} percent`}><span style={{ width: `${Math.round(masterLevel * 100)}%` }} /></div></div>\n        <div className="mixer-channels">\n          {tracks.map((track, index) => <article className={`mixer-channel ${track.muted ? "channel-muted" : ""} ${track.solo ? "channel-solo" : ""}`} key={track.id}>\n            <div className="channel-top"><span className="channel-index">{String(index + 1).padStart(2, "0")}</span><strong>{track.name}</strong><span className="channel-db">{track.gain === 0 ? "−∞" : `${(20 * Math.log10(track.gain)).toFixed(1)} dB`}</span></div>\n            <label className="volume-control"><span>VOL</span><input aria-label={`${track.name} volume`} type="range" min="0" max="1" step="0.01" value={track.gain} onChange={(event) => changeTrack(track.id, { gain: Number(event.currentTarget.value) })} /><output>{Math.round(track.gain * 100)}%</output></label>\n            <div className="channel-buttons"><button className={track.muted ? "channel-active" : ""} aria-pressed={track.muted} onClick={() => changeTrack(track.id, { muted: !track.muted })}>MUTE</button><button className={track.solo ? "channel-active solo-active" : ""} aria-pressed={track.solo} onClick={() => changeTrack(track.id, { solo: !track.solo })}>SOLO</button></div>\n          </article>)}\n          <article className="mixer-channel master-channel"><div className="channel-top"><span className="master-mark">M</span><strong>MASTER</strong><span className="channel-db">{masterGain === 0 ? "−∞" : `${(20 * Math.log10(masterGain)).toFixed(1)} dB`}</span></div><label className="volume-control"><span>OUT</span><input aria-label="Master volume" type="range" min="0" max="1" step="0.01" value={masterGain} onChange={(event) => setMaster(Number(event.currentTarget.value))} /><output>{Math.round(masterGain * 100)}%</output></label><div className="master-meter large-meter" aria-label={`Master output level ${Math.round(masterLevel * 100)} percent`}><span style={{ width: `${Math.round(masterLevel * 100)}%` }} /></div></article>\n        </div>\n        <p className="mixer-note">Track levels and Mute/Solo update during playback. Mixer settings are saved on this device.</p>\n      </section>\n\n      <section className="timeline-panel" aria-label="Multitrack timeline">
         <div className="timeline-heading">
           <div><p className="eyebrow">ARRANGEMENT</p><h2>Timeline <span className="count">{BPM} BPM</span></h2></div>
           <div className="transport">
