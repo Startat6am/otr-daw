@@ -179,3 +179,9 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 .timeline-clip { z-index: 1; }
 .timeline-clip.selected { z-index: 3; }
 .timeline-clip.is-dragging { z-index: 6; }
+
+/* Musical grid selector and visible clip layering */
+.grid-select { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 3px 7px; border: 1px solid #34383a; border-radius: 8px; background: #141618; color: #b9c2bd; font-size: 10px; }
+.grid-select select { min-height: 24px; border: 1px solid #39423d; border-radius: 5px; padding: 2px 5px; background: #202522; color: var(--mint); font: 10px 'DM Mono', monospace; }
+.timeline-clip { background: #284638e8; }
+.timeline-clip.selected { background: #315844f2; }
