@@ -194,3 +194,6 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 .fade-handle { position: absolute; top: 1px; z-index: 4; width: 12px; height: 12px; border: 2px solid #0e1813; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 1px #b6f4dc; transform: translateX(-50%); cursor: ew-resize; touch-action: none; }
 .fade-in-handle { margin-left: 0; }
 .fade-out-handle { transform: translateX(50%); }
+
+.bpm-control { display: inline-flex; align-items: center; gap: 7px; color: #b8bab7; font-size: 12px; white-space: nowrap; }
+.bpm-control input { width: 66px; min-width: 66px; padding: 7px 8px; border: 1px solid #45484a; border-radius: 7px; background: #17191b; color: #f1f1ed; font: inherit; font-variant-numeric: tabular-nums; }
