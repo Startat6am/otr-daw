@@ -197,3 +197,12 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 
 .bpm-control { display: inline-flex; align-items: center; gap: 7px; color: #b8bab7; font-size: 12px; white-space: nowrap; }
 .bpm-control input { width: 66px; min-width: 66px; padding: 7px 8px; border: 1px solid #45484a; border-radius: 7px; background: #17191b; color: #f1f1ed; font: inherit; font-variant-numeric: tabular-nums; }
+
+.project-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.project-actions button, .project-load-button { border: 1px solid #414447; border-radius: 8px; padding: 8px 10px; background: #1b1d20; color: #e9eae6; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.project-name-input { width: 130px; min-width: 80px; border: 1px solid #414447; border-radius: 8px; padding: 8px 10px; background: #141618; color: #f1f1ed; font: inherit; font-size: 12px; }
+.project-load-button input { display: none; }
+@media (max-width: 760px) {
+  .project-actions { order: 3; width: 100%; }
+  .project-name-input { flex: 1; width: 100px; }
+}
