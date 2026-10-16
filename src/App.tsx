@@ -634,9 +634,11 @@ export default function App() {
         <a className="brand" href="/" aria-label="On The Run home"><span className="brand-mark">OTR</span><span>on the run<span className="brand-dot">.</span></span></a>
         <div className="project-actions">
           <input className="project-name-input" aria-label="Project name" value={projectName} onChange={(event) => setProjectName(event.currentTarget.value)} />
-          <button onClick={() => void createNewProject()}>New project</button>
-          <button onClick={() => void saveProjectFile()}>Save project</button>
-          <label className="project-load-button">Load project<input aria-label="Load project file" type="file" accept=".json,.otr.json,application/json" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void loadProjectFile(file); event.currentTarget.value = ""; }} /></label>
+          <div className="project-icon-actions">
+            <button className="icon-action" title="New project" aria-label="New project" onClick={() => void createNewProject()}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
+            <button className="icon-action" title="Save project to file" aria-label="Save project to file" onClick={() => void saveProjectFile()}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z" /><path d="M7 3v6h10V3M7 21v-7h10v7" /></svg></button>
+            <label className="project-load-button icon-action" title="Load project from file" aria-label="Load project from file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h7l2 2H21v11H3z" /><path d="M12 17V11m-3 3 3-3 3 3" /></svg><input aria-label="Load project file" type="file" accept=".json,.otr.json,application/json" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void loadProjectFile(file); event.currentTarget.value = ""; }} /></label>
+          </div>
         </div>
         <span className="version-pill">EARLY ACCESS · 0.2</span>
       </header>
