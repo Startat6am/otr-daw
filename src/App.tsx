@@ -28,7 +28,7 @@ function formatTime(seconds: number) {
 }
 function uid() { return crypto.randomUUID(); }
 
-function Waveform({ buffer }: { buffer: AudioBuffer }) {
+function Waveform({ buffer, sourceStart = 0, sourceEnd = buffer.duration }: { buffer: AudioBuffer; sourceStart?: number; sourceEnd?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -46,11 +46,14 @@ function Waveform({ buffer }: { buffer: AudioBuffer }) {
     ctx.lineCap = "round";
     ctx.beginPath();
     const channel = buffer.getChannelData(0);
-    const samplesPerPixel = Math.max(1, Math.floor(channel.length / rect.width));
+    const rangeStart = Math.max(0, Math.min(channel.length - 1, Math.floor(sourceStart * buffer.sampleRate)));
+    const rangeEnd = Math.max(rangeStart + 1, Math.min(channel.length, Math.floor(sourceEnd * buffer.sampleRate)));
+    const rangeLength = rangeEnd - rangeStart;
+    const samplesPerPixel = Math.max(1, rangeLength / Math.max(1, rect.width));
     const middle = rect.height / 2;
     for (let x = 0; x < rect.width; x++) {
-      const start = x * samplesPerPixel;
-      const end = Math.min(channel.length, start + samplesPerPixel);
+      const start = Math.min(rangeEnd, rangeStart + Math.floor(x * samplesPerPixel));
+      const end = Math.min(rangeEnd, Math.max(start + 1, rangeStart + Math.floor((x + 1) * samplesPerPixel)));
       let min = 1, max = -1;
       for (let i = start; i < end; i++) {
         const v = channel[i];
@@ -61,12 +64,12 @@ function Waveform({ buffer }: { buffer: AudioBuffer }) {
       ctx.lineTo(x + .5, middle - min * rect.height * .43);
     }
     ctx.stroke();
-  }, [buffer]);
+  }, [buffer, sourceStart, sourceEnd]);
   return <canvas ref={canvasRef} className="waveform" aria-label="Audio waveform" />;
 }
 
-function ClipWaveform({ buffer }: { buffer: AudioBuffer }) {
-  return <Waveform buffer={buffer} />;
+function ClipWaveform({ buffer, sourceStart, sourceEnd }: { buffer: AudioBuffer; sourceStart: number; sourceEnd: number }) {
+  return <Waveform buffer={buffer} sourceStart={sourceStart} sourceEnd={sourceEnd} />;
 }
 
 export default function App() {
@@ -630,7 +633,7 @@ export default function App() {
                   }}
                   onPointerCancel={() => { dragRef.current = null; }}>
                   <span className="trim-handle trim-left" data-edge="left" aria-label="Trim clip start" />
-                  <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer} /></div>
+                  <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer} sourceStart={clip.sourceStart} sourceEnd={clip.sourceEnd} /></div>
                   <span className="trim-handle trim-right" data-edge="right" aria-label="Trim clip end" />
                   {selectedClip === clip.id && <div className="clip-nudges"><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, -1); }}>− grid</button><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, 1); }}>+ grid</button></div>}
                 </div>;
