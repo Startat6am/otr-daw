@@ -14,7 +14,7 @@ export type SavedProject = {
   updatedAt: string;
   assets: SavedAsset[];
   tracks: SavedTrack[];
-  settings: { snapEnabled: boolean; timelineZoom: number; masterGain?: number };
+  settings: { snapEnabled: boolean; timelineZoom: number; masterGain?: number; bpm?: number };
 };
 
 const DB_NAME = "on-the-run-daw";
