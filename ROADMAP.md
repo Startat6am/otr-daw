@@ -2,7 +2,7 @@
 
 > Living checklist for the mobile-first audio workstation. Update this file whenever a milestone lands.
 >
-> **Current milestone:** Phase 4 — Project persistence  
+> **Current milestone:** Phase 6 — Mixing foundation  
 > **Last updated:** 2026-10-16
 
 ## Status legend
@@ -49,7 +49,7 @@
 - [ ] Improve selected-clip controls for small screens
 - [x] Add undo/redo for clip editing operations
 
-**Progress:** Basic drag, cross-track move, trim handles, beat snapping toggle and timeline zoom (50–200%) are implemented. Undo/redo stores up to 100 edit snapshots. Phase 4 now auto-saves the current session and imported audio to device-local IndexedDB and restores it on reload. Project create/rename/delete UI and broader migration handling remain open.
+**Progress:** Basic drag, cross-track move, trim handles, beat snapping toggle and timeline zoom (50–200%) are implemented. Undo/redo stores up to 100 edit snapshots. Phase 4 auto-saves the current session and imported audio to device-local IndexedDB and restores it on reload. The first mixer now routes tracks through shared track gain nodes into a master bus, with live volume, mute/solo and a basic output meter. Project create/rename/delete UI remains open.
 
 **Definition of done:** On a phone, a user can import audio, move and trim clips, align them to the beat, split them, and play the arrangement reliably.
 
@@ -69,13 +69,13 @@
 - [ ] Metronome and count-in
 - [ ] Loop range and loop playback
 - [ ] Add, rename and reorder tracks
-- [ ] Track mute, solo and volume controls
+- [x] Track mute, solo and volume controls
 - [ ] Clip gain and basic fades
 
 ## Phase 6 — Mixing and effects
 
-- [ ] Establish a track-to-master audio graph
-- [ ] Add master volume and clipping protection
+- [x] Establish a track-to-master audio graph
+- [x] Add master volume and live output level meter
 - [ ] Add a basic volume effect
 - [ ] Add EQ and reverb as first built-in effects
 - [ ] Design send/return routing for future effects
