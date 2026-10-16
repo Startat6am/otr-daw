@@ -173,3 +173,9 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .clip-inspector label { flex: 1; justify-content: space-between; }
   .clip-inspector input { width: 82px; }
 }
+
+
+/* Overlapping clips are allowed on the same track; keep the selected clip reachable */
+.timeline-clip { z-index: 1; }
+.timeline-clip.selected { z-index: 3; }
+.timeline-clip.is-dragging { z-index: 6; }
