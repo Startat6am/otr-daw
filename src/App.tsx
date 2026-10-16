@@ -248,7 +248,8 @@ export default function App() {
   }
   function scheduleFrom(position: number, context: AudioContext) {
     stopSources();
-    ensureMixer(context, tracksRef.current);\n    const startAt = context.currentTime + .08;
+    ensureMixer(context, tracksRef.current);
+    const startAt = context.currentTime + .08;
     clockStartRef.current = startAt;
     playheadRef.current = position;
     tracks.forEach((track) => track.clips.forEach((clip) => {
