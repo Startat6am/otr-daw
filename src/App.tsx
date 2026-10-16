@@ -10,7 +10,7 @@ type ImportedAudio = {
   buffer: AudioBuffer;
   audioData: ArrayBuffer;
 };
-type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number };
+type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number; fadeIn?: number; fadeOut?: number };
 type Track = { id: string; name: string; clips: Clip[]; gain: number; muted: boolean; solo: boolean };
 const BPM = 120;
 const BASE_PX_PER_SECOND = 58;
@@ -105,7 +105,7 @@ export default function App() {
   const playheadRef = useRef(0);
   const clockStartRef = useRef(0);
   const rafRef = useRef<number | null>(null);
-  const dragRef = useRef<{ clipId: string; fromTrackId: string; startX: number; start: number; sourceStart: number; sourceEnd: number; mode: "move" | "left" | "right"; moved: boolean } | null>(null);
+  const dragRef = useRef<{ clipId: string; fromTrackId: string; startX: number; start: number; sourceStart: number; sourceEnd: number; mode: "move" | "left" | "right" | "fadeIn" | "fadeOut"; fadeIn: number; fadeOut: number; moved: boolean } | null>(null);
 
   function commitTracks(updater: (current: Track[]) => Track[]) {
     const current = tracksRef.current;
@@ -272,9 +272,33 @@ export default function App() {
       source.buffer = asset.buffer;
       const trackGain = mixerNodesRef.current.get(track.id);
       if (!trackGain) return;
-      source.connect(trackGain);
+      const fadeInGain = context.createGain();
+      const fadeOutGain = context.createGain();
+      source.connect(fadeInGain);
+      fadeInGain.connect(fadeOutGain);
+      fadeOutGain.connect(trackGain);
+      const scheduledAt = startAt + Math.max(0, clip.start - position);
+      const fadeIn = Math.min(clipDuration, Math.max(0, clip.fadeIn ?? 0));
+      const fadeOut = Math.min(clipDuration, Math.max(0, clip.fadeOut ?? 0));
+      if (fadeIn > elapsed) {
+        fadeInGain.gain.setValueAtTime(Math.max(0, elapsed / fadeIn), scheduledAt);
+        fadeInGain.gain.linearRampToValueAtTime(1, scheduledAt + fadeIn - elapsed);
+      } else {
+        fadeInGain.gain.setValueAtTime(1, scheduledAt);
+      }
+      if (fadeOut > 0 && elapsed > clipDuration - fadeOut) {
+        fadeOutGain.gain.setValueAtTime(Math.max(0, (clipDuration - elapsed) / fadeOut), scheduledAt);
+        fadeOutGain.gain.linearRampToValueAtTime(0, scheduledAt + duration);
+      } else {
+        fadeOutGain.gain.setValueAtTime(1, scheduledAt);
+        if (fadeOut > 0) {
+          const fadeOutStart = scheduledAt + Math.max(0, clipDuration - fadeOut - elapsed);
+          fadeOutGain.gain.setValueAtTime(1, fadeOutStart);
+          fadeOutGain.gain.linearRampToValueAtTime(0, scheduledAt + duration);
+        }
+      }
       sourcesRef.current.push(source);
-      source.start(startAt + Math.max(0, clip.start - position), offset, duration);
+      source.start(scheduledAt, offset, duration);
     }));
     playingRef.current = true;
     setIsPlaying(true);
@@ -425,8 +449,8 @@ export default function App() {
       const length = clip.sourceEnd - clip.sourceStart;
       if (local <= .03 || local >= length - .03) return track;
       const cut = clip.sourceStart + local;
-      const left = { ...clip, sourceEnd: cut };
-      const right: Clip = { ...clip, id: uid(), start: playhead, sourceStart: cut };
+      const left = { ...clip, sourceEnd: cut, fadeOut: 0 };
+      const right: Clip = { ...clip, id: uid(), start: playhead, sourceStart: cut, fadeIn: 0 };
       const next = [...track.clips];
       next.splice(index, 1, left, right);
       didSplit = true;
@@ -552,6 +576,8 @@ export default function App() {
             <strong>Selected clip</strong>
             <label>Start (sec)<input aria-label="Clip start time in seconds" type="number" min="0" step={snapEnabled ? BEAT * 4 / gridDivision : 0.01} value={Number(selected.clip.start.toFixed(3))} onChange={(event) => setSelectedClipTiming(Number(event.currentTarget.value), duration)} /></label>
             <label>Length (sec)<input aria-label="Clip duration in seconds" type="number" min="0.05" max={selected.clip.sourceEnd - selected.clip.sourceStart + (assets.find((asset) => asset.id === selected.clip.assetId)?.duration ?? 0)} step={snapEnabled ? BEAT * 4 / gridDivision : 0.01} value={Number(duration.toFixed(3))} onChange={(event) => setSelectedClipTiming(selected.clip.start, Number(event.currentTarget.value))} /></label>
+            <label>Fade In (sec)<input aria-label="Clip fade in duration in seconds" type="number" min="0" max={duration} step="0.05" value={Number(Math.min(duration, selected.clip.fadeIn ?? 0).toFixed(2))} onChange={(event) => updateClip(selected.clip.id, { fadeIn: Math.max(0, Math.min(duration, Number(event.currentTarget.value) || 0)) })} /></label>
+            <label>Fade Out (sec)<input aria-label="Clip fade out duration in seconds" type="number" min="0" max={duration} step="0.05" value={Number(Math.min(duration, selected.clip.fadeOut ?? 0).toFixed(2))} onChange={(event) => updateClip(selected.clip.id, { fadeOut: Math.max(0, Math.min(duration, Number(event.currentTarget.value) || 0)) })} /></label>
           </div>;
         })()}
         <div className="timeline-scroll">
@@ -572,7 +598,8 @@ export default function App() {
                   onPointerDown={(event) => {
                     const target = event.target as HTMLElement;
                     const edge = target.closest<HTMLElement>("[data-edge]")?.dataset.edge;
-                    dragRef.current = { clipId: clip.id, fromTrackId: track.id, startX: event.clientX, start: clip.start, sourceStart: clip.sourceStart, sourceEnd: clip.sourceEnd, mode: edge === "left" || edge === "right" ? edge : "move", moved: false };
+                    const fade = target.closest<HTMLElement>("[data-fade]")?.dataset.fade;
+                    dragRef.current = { clipId: clip.id, fromTrackId: track.id, startX: event.clientX, start: clip.start, sourceStart: clip.sourceStart, sourceEnd: clip.sourceEnd, fadeIn: clip.fadeIn ?? 0, fadeOut: clip.fadeOut ?? 0, mode: fade === "fadeIn" || fade === "fadeOut" ? fade : edge === "left" || edge === "right" ? edge : "move", moved: false };
                     undoStackRef.current.push(tracksRef.current);
                     if (undoStackRef.current.length > 100) undoStackRef.current.shift();
                     redoStackRef.current = [];
@@ -585,7 +612,11 @@ export default function App() {
                     if (!drag || drag.clipId !== clip.id || !event.buttons) return;
                     const delta = (event.clientX - drag.startX) / PX_PER_SECOND;
                     if (Math.abs(event.clientX - drag.startX) > 3) drag.moved = true;
-                    if (drag.mode === "move") {
+                    if (drag.mode === "fadeIn") {
+                      updateClip(clip.id, { fadeIn: Math.max(0, Math.min(clip.sourceEnd - clip.sourceStart, drag.fadeIn + delta)) }, false);
+                    } else if (drag.mode === "fadeOut") {
+                      updateClip(clip.id, { fadeOut: Math.max(0, Math.min(clip.sourceEnd - clip.sourceStart, drag.fadeOut - delta)) }, false);
+                    } else if (drag.mode === "move") {
                       const proposed = Math.max(0, snapTime(drag.start + delta));
                       const start = moveStartWithoutOverlap(clip.id, drag.fromTrackId, proposed, delta);
                       updateClip(clip.id, { start }, false);
@@ -632,6 +663,12 @@ export default function App() {
                     dragRef.current = null;
                   }}
                   onPointerCancel={() => { dragRef.current = null; }}>
+                  {selectedClip === clip.id && <>
+                    <span className="fade-shade fade-in-shade" style={{ width: `${Math.min(100, Math.max(0, (clip.fadeIn ?? 0) / duration * 100))}%` }} />
+                    <span className="fade-shade fade-out-shade" style={{ width: `${Math.min(100, Math.max(0, (clip.fadeOut ?? 0) / duration * 100))}%` }} />
+                    <span className="fade-handle fade-in-handle" data-fade="fadeIn" style={{ left: `${Math.min(100, Math.max(0, (clip.fadeIn ?? 0) / duration * 100))}%` }} title="Drag to adjust Fade In" aria-label="Adjust fade in" />
+                    <span className="fade-handle fade-out-handle" data-fade="fadeOut" style={{ right: `${Math.min(100, Math.max(0, (clip.fadeOut ?? 0) / duration * 100))}%` }} title="Drag to adjust Fade Out" aria-label="Adjust fade out" />
+                  </>}
                   <span className="trim-handle trim-left" data-edge="left" aria-label="Trim clip start" />
                   <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer} sourceStart={clip.sourceStart} sourceEnd={clip.sourceEnd} /></div>
                   <span className="trim-handle trim-right" data-edge="right" aria-label="Trim clip end" />
