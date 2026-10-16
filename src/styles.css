@@ -132,3 +132,6 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 .trim-right { right: 0; border-radius: 0 6px 6px 0; border-left: 1px solid #b8f5dc; }
 .timeline-clip > strong { padding-left: 5px; padding-right: 5px; pointer-events: none; }
 .clip-wave { pointer-events: none; }
+
+.save-indicator { color: var(--mint); }
+@media (max-width: 520px) { .footer { flex-wrap: wrap; } .save-indicator { order: 3; width: 100%; } }
