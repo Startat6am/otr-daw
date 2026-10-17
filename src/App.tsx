@@ -29,7 +29,7 @@ function detectBpm(buffer: AudioBuffer): number | undefined {
   const channelCount = buffer.numberOfChannels;
   const hop = Math.max(1, Math.round(buffer.sampleRate / 100));
   const frameCount = Math.min(Math.floor(buffer.length / hop), 12000);
-  if (frameCount < 500) return undefined;
+  if (frameCount < 150) return undefined;
   const energy = new Float32Array(frameCount);
   for (let frame = 0; frame < frameCount; frame++) {
     const start = frame * hop;
