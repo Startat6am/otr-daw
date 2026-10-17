@@ -623,17 +623,29 @@ export default function App() {
     return snapEnabled ? Math.round(seconds / gridStep) * gridStep : seconds;
   }
   function moveStartWithoutOverlap(clipId: string, trackId: string, proposedStart: number, direction: number) {
-    if (overlapEnabled) return Math.max(0, proposedStart);
+    const startAt = Math.max(0, proposedStart);
+    if (overlapEnabled) return startAt;
     const track = tracksRef.current.find((item) => item.id === trackId);
     const clip = track?.clips.find((item) => item.id === clipId);
-    if (!track || !clip) return Math.max(0, proposedStart);
-    const duration = clip.sourceEnd - clip.sourceStart;
-    let start = Math.max(0, proposedStart);
-    const others = track.clips.filter((item) => item.id !== clipId).sort((a, b) => a.start - b.start);
-    for (const other of others) {
-      const otherEnd = other.start + other.sourceEnd - other.sourceStart;
-      if (start < otherEnd - 0.001 && start + duration > other.start + 0.001) {
-        start = direction >= 0 ? otherEnd : Math.max(0, other.start - duration);
+    if (!track || !clip) return startAt;
+
+    // Use timeline durations (including tempo stretch), not raw source seconds.
+    const duration = clipTimelineDuration(clip);
+    const others = track.clips
+      .filter((item) => item.id !== clipId)
+      .sort((a, b) => a.start - b.start);
+    let start = startAt;
+
+    // Scan in the direction of travel so multiple neighboring clips cannot
+    // push the dragged clip back into an overlap that was already checked.
+    const ordered = direction < 0 ? [...others].reverse() : others;
+    for (const other of ordered) {
+      const otherEnd = other.start + clipTimelineDuration(other);
+      const overlaps = start < otherEnd - 0.001 && start + duration > other.start + 0.001;
+      if (overlaps) {
+        start = direction < 0
+          ? Math.max(0, other.start - duration)
+          : otherEnd;
       }
     }
     return Math.max(0, start);
