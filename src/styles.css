@@ -436,3 +436,47 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .sidebar-toggle { width: 24px; }
 }
 
+
+
+/* Final arrangement polish: tempo without duplicate controls, track controls stacked */
+.bpm-control > button { display: none; }
+.bpm-wheel { gap: 0; height: 36px; cursor: ns-resize; }
+.bpm-wheel small { display: none; }
+.bpm-control input { width: 58px; min-width: 58px; }
+.track-label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 5px;
+  padding: 7px 6px;
+}
+.track-label > span {
+  flex: 0 0 auto;
+  width: 100%;
+  line-height: 1.25;
+  font-size: 10px;
+}
+.track-label-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.track-label-actions button {
+  width: 25px;
+  height: 24px;
+}
+.sidebar-collapsed .track-label {
+  align-items: center;
+  justify-content: center;
+  padding: 5px 2px;
+}
+.sidebar-collapsed .track-label > span { font-size: 9px; }
+.sidebar-collapsed .track-label-actions { display: none; }
+@media (max-width: 520px) {
+  .sidebar-expanded .track-label { left: -82px; width: 82px; }
+  .sidebar-expanded .track-label-actions button { width: 25px; height: 25px; }
+  .bpm-wheel { width: 48px; }
+  .bpm-control input { width: 50px; min-width: 50px; }
+}
