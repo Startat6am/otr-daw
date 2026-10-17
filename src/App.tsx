@@ -105,6 +105,9 @@ export default function App() {
   const [gridDivision, setGridDivision] = useState(4);
   const [overlapEnabled, setOverlapEnabled] = useState(true);
   const [timelineZoom, setTimelineZoom] = useState(1);
+  const [trackSidebarCollapsed, setTrackSidebarCollapsed] = useState(false);
+  const [bpmDraft, setBpmDraft] = useState(String(DEFAULT_BPM));
+  const bpmGestureRef = useRef<{ startY: number; startBpm: number; lastStep: number } | null>(null);
   const [masterGain, setMasterGain] = useState(0.85);
   const [masterLevel, setMasterLevel] = useState(0);
   const masterGainRef = useRef(0.85);
@@ -181,6 +184,7 @@ export default function App() {
           setTracks(restoredTracks);
           setSnapEnabled(saved.settings.snapEnabled);
           setBpm(typeof saved.settings.bpm === "number" ? Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(saved.settings.bpm))) : DEFAULT_BPM);
+          setBpmDraft(String(typeof saved.settings.bpm === "number" ? Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(saved.settings.bpm))) : DEFAULT_BPM));
           setTimelineZoom(saved.settings.timelineZoom);
           const restoredMaster = typeof saved.settings.masterGain === "number" ? Math.max(0, Math.min(1, saved.settings.masterGain)) : 0.85;
           masterGainRef.current = restoredMaster;
@@ -228,6 +232,7 @@ export default function App() {
     setTracks(freshTracks);
     setProjectName("Untitled project");
     setBpm(DEFAULT_BPM);
+    setBpmDraft(String(DEFAULT_BPM));
     setSnapEnabled(true);
     setGridDivision(4);
     setOverlapEnabled(true);
@@ -296,6 +301,7 @@ export default function App() {
       setTracks(restoredTracks);
       setProjectName(parsed.projectName || file.name.replace(/\.otr\.json$/i, "") || "Imported project");
       setBpm(typeof parsed.settings.bpm === "number" ? Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(parsed.settings.bpm))) : DEFAULT_BPM);
+      setBpmDraft(String(typeof parsed.settings.bpm === "number" ? Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(parsed.settings.bpm))) : DEFAULT_BPM));
       setSnapEnabled(Boolean(parsed.settings.snapEnabled));
       setTimelineZoom(typeof parsed.settings.timelineZoom === "number" ? Math.max(.5, Math.min(2, parsed.settings.timelineZoom)) : 1);
       const restoredMaster = typeof parsed.settings.masterGain === "number" ? Math.max(0, Math.min(1, parsed.settings.masterGain)) : 0.85;
@@ -669,6 +675,25 @@ export default function App() {
   const maxEnd = Math.max(16, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clip.sourceEnd - clip.sourceStart + 2)));
   const timelineWidth = maxEnd * PX_PER_SECOND;
   const rulerCount = Math.ceil(maxEnd / 2);
+  function applyBpm(value: number) {
+    const next = Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(value)));
+    setBpm(next);
+    setBpmDraft(String(next));
+  }
+  function onBpmWheelStart(event: React.PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    bpmGestureRef.current = { startY: event.clientY, startBpm: bpm, lastStep: 0 };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function onBpmWheelMove(event: React.PointerEvent<HTMLDivElement>) {
+    const gesture = bpmGestureRef.current;
+    if (!gesture) return;
+    const step = Math.trunc((gesture.startY - event.clientY) / 8);
+    if (step !== gesture.lastStep) {
+      gesture.lastStep = step;
+      applyBpm(gesture.startBpm + step);
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -735,7 +760,7 @@ export default function App() {
             <span className="time-readout">{formatTime(playhead)}</span>
           </div>
         </div>
-        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><label className="bpm-control">BPM<input aria-label="Project tempo in beats per minute" type="number" min={MIN_BPM} max={MAX_BPM} step="1" value={bpm} onChange={(event) => { const value = Number(event.currentTarget.value); if (Number.isFinite(value) && value >= MIN_BPM && value <= MAX_BPM) setBpm(Math.round(value)); }} onBlur={(event) => { const value = Number(event.currentTarget.value); setBpm(Number.isFinite(value) ? Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(value))) : DEFAULT_BPM); }} /></label><button onClick={undoEdit} disabled={undoStackRef.current.length === 0} aria-label="Undo last edit">↶ Undo</button><button onClick={redoEdit} disabled={redoStackRef.current.length === 0} aria-label="Redo last undone edit">↷ Redo</button><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><label className="grid-select">Grid<select aria-label="Snap grid division" value={gridDivision} onChange={(event) => setGridDivision(Number(event.currentTarget.value))}><option value={2}>1/2</option><option value={4}>1/4</option><option value={8}>1/8</option><option value={16}>1/16</option><option value={32}>1/32</option></select></label><button className={overlapEnabled ? "tool-active" : ""} aria-pressed={overlapEnabled} onClick={() => setOverlapEnabled((value) => !value)}>Overlap {overlapEnabled ? "On" : "Off"}</button><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={duplicateSelected} disabled={!selectedClip}>Duplicate</button><button onClick={copySelected} disabled={!selectedClip}>Copy</button><button onClick={pasteClip} disabled={!clipboardClip}>Paste</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
+        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><div className="bpm-control"><span>BPM</span><button type="button" aria-label="Decrease BPM" onClick={() => applyBpm(bpm - 1)}>−</button><div className="bpm-wheel" role="slider" tabIndex={0} aria-label="Tempo BPM: swipe up or down to change" aria-valuemin={MIN_BPM} aria-valuemax={MAX_BPM} aria-valuenow={bpm} onPointerDown={onBpmWheelStart} onPointerMove={onBpmWheelMove} onPointerUp={() => { bpmGestureRef.current = null; }} onPointerCancel={() => { bpmGestureRef.current = null; }} onKeyDown={(event) => { if (event.key === "ArrowUp") { event.preventDefault(); applyBpm(bpm + 1); } else if (event.key === "ArrowDown") { event.preventDefault(); applyBpm(bpm - 1); } else if (event.key === "PageUp") { event.preventDefault(); applyBpm(bpm + 5); } else if (event.key === "PageDown") { event.preventDefault(); applyBpm(bpm - 5); } }}><strong>{bpm}</strong><small>SWIPE ↕</small></div><button type="button" aria-label="Increase BPM" onClick={() => applyBpm(bpm + 1)}>＋</button><input aria-label="Enter BPM value" type="number" min={MIN_BPM} max={MAX_BPM} value={bpmDraft} onChange={(event) => setBpmDraft(event.currentTarget.value)} onBlur={() => applyBpm(Number(bpmDraft) || DEFAULT_BPM)} onKeyDown={(event) => { if (event.key === "Enter") { applyBpm(Number(bpmDraft) || DEFAULT_BPM); event.currentTarget.blur(); } }} /></div><button onClick={undoEdit} disabled={undoStackRef.current.length === 0} aria-label="Undo last edit">↶ Undo</button><button onClick={redoEdit} disabled={redoStackRef.current.length === 0} aria-label="Redo last undone edit">↷ Redo</button><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><label className="grid-select">Grid<select aria-label="Snap grid division" value={gridDivision} onChange={(event) => setGridDivision(Number(event.currentTarget.value))}><option value={2}>1/2</option><option value={4}>1/4</option><option value={8}>1/8</option><option value={16}>1/16</option><option value={32}>1/32</option></select></label><button className={overlapEnabled ? "tool-active" : ""} aria-pressed={overlapEnabled} onClick={() => setOverlapEnabled((value) => !value)}>Overlap {overlapEnabled ? "On" : "Off"}</button><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={duplicateSelected} disabled={!selectedClip}>Duplicate</button><button onClick={copySelected} disabled={!selectedClip}>Copy</button><button onClick={pasteClip} disabled={!clipboardClip}>Paste</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
         {selectedClip && (() => {
           const selected = tracks.flatMap((track) => track.clips.map((clip) => ({ clip, track }))).find((item) => item.clip.id === selectedClip);
           if (!selected) return null;
@@ -748,16 +773,16 @@ export default function App() {
             <label>Fade Out (sec)<input aria-label="Clip fade out duration in seconds" type="number" min="0" max={duration} step="0.05" value={Number(Math.min(duration, selected.clip.fadeOut ?? 0).toFixed(2))} onChange={(event) => updateClip(selected.clip.id, { fadeOut: Math.max(0, Math.min(duration, Number(event.currentTarget.value) || 0)) })} /></label>
           </div>;
         })()}
-        <div className="timeline-scroll">
-          <div className="timeline-inner" style={{ width: timelineWidth }}>
-            <div className="ruler" style={{ width: timelineWidth }} onPointerDown={(event) => {
+        <div className={"timeline-scroll " + (trackSidebarCollapsed ? "sidebar-collapsed" : "sidebar-expanded")}>
+          <div className="timeline-inner" style={{ width: timelineWidth + (trackSidebarCollapsed ? 24 : (window.innerWidth <= 520 ? 82 : 104)) }}>
+            <div className="timeline-gutter"><button className="sidebar-toggle" type="button" aria-label={trackSidebarCollapsed ? "Expand track sidebar" : "Collapse track sidebar"} title={trackSidebarCollapsed ? "Expand track sidebar" : "Collapse track sidebar"} onClick={() => setTrackSidebarCollapsed((value) => !value)}>{trackSidebarCollapsed ? "›" : "‹"}</button></div><div className="ruler" style={{ width: timelineWidth }} onPointerDown={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
               seekPlayhead((event.clientX - rect.left) / PX_PER_SECOND);
             }}>
               {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * 2 * PX_PER_SECOND }}><span>{String(i + 1).padStart(2, "0")}</span></div>)}
             </div>
             {tracks.map((track) => <div className="timeline-track" data-track-id={track.id} key={track.id} style={{ width: timelineWidth }}>
-              <div className="track-label"><span title={track.name}>{track.name}</span><div className="track-label-actions"><button type="button" title={"Rename " + track.name} aria-label={"Rename " + track.name} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); renameTrack(track.id); }}>✎</button><button type="button" title={"Delete " + track.name} aria-label={"Delete " + track.name} disabled={tracks.length <= 1} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); removeTrack(track.id); }}>×</button></div></div>
+              <div className="track-label"><span title={track.name}>{trackSidebarCollapsed ? String(tracks.findIndex((item) => item.id === track.id) + 1).padStart(2, "0") : track.name}</span><div className="track-label-actions"><button type="button" title={"Rename " + track.name} aria-label={"Rename " + track.name} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); renameTrack(track.id); }}>✎</button><button type="button" title={"Delete " + track.name} aria-label={"Delete " + track.name} disabled={tracks.length <= 1} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); removeTrack(track.id); }}>×</button></div></div>
               {track.clips.map((clip) => {
                 const asset = assets.find((item) => item.id === clip.assetId);
                 if (!asset) return null;
