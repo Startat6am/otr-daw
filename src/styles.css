@@ -325,3 +325,114 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .timeline-clip { top: 28px; }
 }
 
+
+/* Collapsible track sidebar and touch-friendly tempo control */
+.timeline-inner { position: relative; }
+.timeline-gutter {
+  position: sticky;
+  left: 0;
+  top: 0;
+  z-index: 8;
+  height: 0;
+  overflow: visible;
+}
+.sidebar-toggle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #3d5147;
+  border-radius: 0 6px 6px 0;
+  background: #203029;
+  color: var(--mint);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.sidebar-expanded .ruler,
+.sidebar-expanded .timeline-track { margin-left: 104px; }
+.sidebar-collapsed .ruler,
+.sidebar-collapsed .timeline-track { margin-left: 24px; }
+.sidebar-expanded .track-label {
+  position: absolute;
+  left: -104px;
+  top: 0;
+  width: 104px;
+  min-height: 100%;
+  box-sizing: border-box;
+  border-radius: 0;
+  pointer-events: auto;
+}
+.sidebar-collapsed .track-label {
+  position: absolute;
+  left: -24px;
+  top: 0;
+  width: 24px;
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 6px 2px;
+  justify-content: center;
+  border-radius: 0;
+  border-right: 1px solid #3a423d;
+  pointer-events: auto;
+}
+.sidebar-collapsed .track-label > span {
+  flex: none;
+  width: 100%;
+  text-align: center;
+  font-size: 9px;
+}
+.sidebar-collapsed .track-label-actions { display: none; }
+.sidebar-expanded .track-label-actions button { width: 28px; height: 30px; }
+.bpm-control { display: inline-flex; align-items: center; gap: 5px; }
+.bpm-control > span { font-size: 10px; font-weight: 700; color: #b8bab7; }
+.bpm-control > button {
+  width: 30px;
+  min-width: 30px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #3b544a;
+  border-radius: 7px;
+  background: #203029;
+  color: var(--mint);
+  font-size: 16px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.bpm-wheel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 55px;
+  height: 42px;
+  border: 1px solid #4b7462;
+  border-radius: 8px;
+  background: #101d17;
+  color: var(--mint);
+  cursor: ns-resize;
+  user-select: none;
+  touch-action: none;
+}
+.bpm-wheel strong { font: 700 16px/17px 'DM Mono', monospace; }
+.bpm-wheel small { font: 7px/9px 'DM Mono', monospace; color: #9bb9aa; letter-spacing: .5px; }
+.bpm-control input { width: 54px; min-width: 54px; }
+@media (max-width: 520px) {
+  .sidebar-expanded .ruler,
+  .sidebar-expanded .timeline-track { margin-left: 82px; }
+  .sidebar-expanded .track-label { left: -82px; width: 82px; }
+  .sidebar-expanded .track-label-actions { gap: 1px; }
+  .sidebar-expanded .track-label-actions button { width: 23px; height: 28px; font-size: 12px; }
+  .bpm-control { gap: 3px; }
+  .bpm-control > button { width: 27px; min-width: 27px; }
+  .bpm-wheel { width: 48px; }
+  .bpm-control input { width: 48px; min-width: 48px; padding: 6px 4px; }
+  .sidebar-toggle { width: 24px; }
+}
+
