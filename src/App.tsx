@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { loadSavedProject, saveProject, type SavedProject } from "./persistence";
+import { timeStretchBuffer } from "./timeStretch";
 
 type ImportedAudio = {
   id: string;
@@ -10,7 +11,7 @@ type ImportedAudio = {
   buffer: AudioBuffer;
   audioData: ArrayBuffer;
 };
-type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number; fadeIn?: number; fadeOut?: number };
+type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number; tempoBpm?: number; fadeIn?: number; fadeOut?: number };
 type Track = { id: string; name: string; clips: Clip[]; gain: number; muted: boolean; solo: boolean };
 const DEFAULT_BPM = 120;
 const MIN_BPM = 40;
@@ -124,6 +125,8 @@ export default function App() {
   const PX_PER_SECOND = BASE_PX_PER_SECOND * timelineZoom;
   const contextRef = useRef<AudioContext | null>(null);
   const sourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const stretchedBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
+  const resumeAfterTempoChangeRef = useRef(false);
   const playingRef = useRef(false);
   const playheadRef = useRef(0);
   const clockStartRef = useRef(0);
@@ -375,24 +378,37 @@ export default function App() {
     rafRef.current = null;
     stopSources();
   }
-  function scheduleFrom(position: number, context: AudioContext) {
+  async function scheduleFrom(position: number, context: AudioContext) {
     stopSources();
     ensureMixer(context, tracksRef.current);
     const startAt = context.currentTime + .08;
     clockStartRef.current = startAt;
     playheadRef.current = position;
-    tracks.forEach((track) => track.clips.forEach((clip) => {
+    for (const track of tracksRef.current) for (const clip of track.clips) {
       const asset = assets.find((item) => item.id === clip.assetId);
-      if (!asset) return;
-      const clipDuration = clip.sourceEnd - clip.sourceStart;
+      if (!asset) continue;
+      const sourceDuration = clip.sourceEnd - clip.sourceStart;
+      const sourceTempo = clip.tempoBpm ?? DEFAULT_BPM;
+      const stretchRatio = Math.max(0.25, Math.min(4, sourceTempo / bpm));
+      const clipDuration = sourceDuration * stretchRatio;
       const clipEnd = clip.start + clipDuration;
-      if (clipEnd <= position) return;
+      if (clipEnd <= position) continue;
       const elapsed = Math.max(0, position - clip.start);
-      const offset = clip.sourceStart + elapsed;
-      const duration = clip.sourceEnd - offset;
-      if (duration <= 0) return;
+      const cacheKey = `${clip.id}:${clip.sourceStart}:${clip.sourceEnd}:${bpm}:${asset.id}`;
+      let stretched = stretchedBuffersRef.current.get(cacheKey);
+      if (!stretched) {
+        const startFrame = Math.max(0, Math.floor(clip.sourceStart * asset.buffer.sampleRate));
+        const endFrame = Math.min(asset.buffer.length, Math.max(startFrame + 1, Math.floor(clip.sourceEnd * asset.buffer.sampleRate)));
+        const segment = context.createBuffer(asset.buffer.numberOfChannels, endFrame - startFrame, asset.buffer.sampleRate);
+        for (let channel = 0; channel < asset.buffer.numberOfChannels; channel++) segment.copyToChannel(asset.buffer.getChannelData(channel).subarray(startFrame, endFrame), channel);
+        stretched = timeStretchBuffer(segment, stretchRatio, context);
+        stretchedBuffersRef.current.set(cacheKey, stretched);
+      }
+      const offset = elapsed;
+      const duration = clipDuration - elapsed;
+      if (duration <= 0) continue;
       const source = context.createBufferSource();
-      source.buffer = asset.buffer;
+      source.buffer = stretched;
       const trackGain = mixerNodesRef.current.get(track.id);
       if (!trackGain) return;
       const fadeInGain = context.createGain();
@@ -401,8 +417,8 @@ export default function App() {
       fadeInGain.connect(fadeOutGain);
       fadeOutGain.connect(trackGain);
       const scheduledAt = startAt + Math.max(0, clip.start - position);
-      const fadeIn = Math.min(clipDuration, Math.max(0, clip.fadeIn ?? 0));
-      const fadeOut = Math.min(clipDuration, Math.max(0, clip.fadeOut ?? 0));
+      const fadeIn = Math.min(clipDuration, Math.max(0, (clip.fadeIn ?? 0) * stretchRatio));
+      const fadeOut = Math.min(clipDuration, Math.max(0, (clip.fadeOut ?? 0) * stretchRatio));
       if (fadeIn > elapsed) {
         fadeInGain.gain.setValueAtTime(Math.max(0, elapsed / fadeIn), scheduledAt);
         fadeInGain.gain.linearRampToValueAtTime(1, scheduledAt + fadeIn - elapsed);
@@ -422,15 +438,21 @@ export default function App() {
       }
       sourcesRef.current.push(source);
       source.start(scheduledAt, offset, duration);
-    }));
+    }
     playingRef.current = true;
     setIsPlaying(true);
   }
+  useEffect(() => {
+    if (!resumeAfterTempoChangeRef.current || !contextRef.current) return;
+    resumeAfterTempoChangeRef.current = false;
+    void scheduleFrom(playheadRef.current, contextRef.current);
+  }, [bpm]);
+
   async function toggleTransport() {
     const context = getContext();
     if (playingRef.current) { pauseTransport(); return; }
     if (context.state === "suspended") await context.resume();
-    const maxEnd = Math.max(0, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clip.sourceEnd - clip.sourceStart)));
+    const maxEnd = Math.max(0, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clipTimelineDuration(clip))));
     if (playheadRef.current >= maxEnd && maxEnd > 0) {
       playheadRef.current = 0;
       setPlayhead(0);
@@ -439,7 +461,7 @@ export default function App() {
       setStatus("Add an audio clip to a track before pressing play.");
       return;
     }
-    scheduleFrom(playheadRef.current, context);
+    await scheduleFrom(playheadRef.current, context);
   }
   function stopTransport() {
     pauseTransport();
@@ -452,7 +474,7 @@ export default function App() {
     playheadRef.current = next;
     setPlayhead(next);
     const context = contextRef.current;
-    if (playingRef.current && context) scheduleFrom(next, context);
+    if (playingRef.current && context) void scheduleFrom(next, context);
   }
   function maxTimelineSeconds() {
     return Math.max(16, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clip.sourceEnd - clip.sourceStart + 2)));
@@ -474,7 +496,7 @@ export default function App() {
         }
         const position = Math.max(0, context.currentTime - clockStartRef.current + playheadRef.current);
         setPlayhead(position);
-        const end = Math.max(0, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clip.sourceEnd - clip.sourceStart)));
+        const end = Math.max(0, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clipTimelineDuration(clip))));
         if (end > 0 && position >= end) {
           playingRef.current = false;
           setIsPlaying(false);
@@ -566,7 +588,7 @@ export default function App() {
   }
 
   function addClip(asset: ImportedAudio, trackId: string) {
-    const clip: Clip = { id: uid(), assetId: asset.id, start: 0, sourceStart: 0, sourceEnd: asset.duration };
+    const clip: Clip = { id: uid(), assetId: asset.id, start: 0, sourceStart: 0, sourceEnd: asset.duration, tempoBpm: bpm };
     commitTracks((current) => current.map((track) => track.id === trackId ? { ...track, clips: [...track.clips, clip] } : track));
     setSelectedClip(clip.id);
     setStatus(`Added ${asset.name} to ${tracks.find((track) => track.id === trackId)?.name}.`);
@@ -667,16 +689,32 @@ export default function App() {
     const asset = assets.find((item) => item.id === selected.clip.assetId);
     if (!asset) return;
     const safeStart = Math.max(0, Number.isFinite(start) ? start : 0);
-    const safeDuration = Math.max(0.05, Math.min(asset.duration - selected.clip.sourceStart, Number.isFinite(duration) ? duration : 0.05));
-    updateClip(selected.clip.id, { start: safeStart, sourceEnd: selected.clip.sourceStart + safeDuration });
+    const ratio = (selected.clip.tempoBpm ?? DEFAULT_BPM) / bpm;
+    const sourceLength = Math.max(0.05, Math.min(asset.duration - selected.clip.sourceStart, (Number.isFinite(duration) ? duration : 0.05) / ratio));
+    updateClip(selected.clip.id, { start: safeStart, sourceEnd: selected.clip.sourceStart + sourceLength });
   }
 
-  const maxEnd = Math.max(16, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clip.sourceEnd - clip.sourceStart + 2)));
+  const clipTimelineDuration = (clip: Clip) => (clip.sourceEnd - clip.sourceStart) * ((clip.tempoBpm ?? DEFAULT_BPM) / bpm);
+  const maxEnd = Math.max(16, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clipTimelineDuration(clip) + 2)));
   const timelineWidth = maxEnd * PX_PER_SECOND;
   const rulerCount = Math.ceil(maxEnd / (BEAT * 4));
   function applyBpm(value: number) {
     const next = Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(value)));
+    if (next === bpm) return;
+    const wasPlaying = playingRef.current;
+    if (wasPlaying && contextRef.current) {
+      const context = contextRef.current;
+      playheadRef.current = Math.max(0, playheadRef.current + context.currentTime - clockStartRef.current);
+      setPlayhead(playheadRef.current);
+      playingRef.current = false;
+      setIsPlaying(false);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      stopSources();
+    }
+    resumeAfterTempoChangeRef.current = wasPlaying;
     setBpm(next);
+    stretchedBuffersRef.current.clear();
   }
   function onBpmWheelStart(event: React.PointerEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -762,7 +800,7 @@ export default function App() {
         {selectedClip && (() => {
           const selected = tracks.flatMap((track) => track.clips.map((clip) => ({ clip, track }))).find((item) => item.clip.id === selectedClip);
           if (!selected) return null;
-          const duration = selected.clip.sourceEnd - selected.clip.sourceStart;
+          const duration = clipTimelineDuration(selected.clip);
           return <div className="clip-inspector" aria-label="Selected clip settings">
             <strong>Selected clip</strong>
             <label>Start (sec)<input aria-label="Clip start time in seconds" type="number" min="0" step={snapEnabled ? BEAT * 4 / gridDivision : 0.01} value={Number(selected.clip.start.toFixed(3))} onChange={(event) => setSelectedClipTiming(Number(event.currentTarget.value), duration)} /></label>
@@ -797,7 +835,7 @@ export default function App() {
               {track.clips.map((clip) => {
                 const asset = assets.find((item) => item.id === clip.assetId);
                 if (!asset) return null;
-                const duration = clip.sourceEnd - clip.sourceStart;
+                const duration = clipTimelineDuration(clip);
                 return <div key={clip.id} className={"timeline-clip " + (selectedClip === clip.id ? "selected " : "") + (dragRef.current?.clipId === clip.id ? "is-dragging" : "")} style={{ left: clip.start * PX_PER_SECOND, width: Math.max(34, duration * PX_PER_SECOND) }} onClick={() => setSelectedClip(clip.id)} role="button" tabIndex={0} aria-label={"Select clip " + asset.name} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedClip(clip.id); }}
                   onPointerDown={(event) => {
                     const target = event.target as HTMLElement;
@@ -850,10 +888,10 @@ export default function App() {
                           let placed = movedClip;
                           if (!overlapEnabled) {
                             const duration = placed.sourceEnd - placed.sourceStart;
-                            const conflicts = item.clips.filter((other: Clip) => placed.start < other.start + other.sourceEnd - other.sourceStart - 0.001 && placed.start + duration > other.start + 0.001);
+                            const conflicts = item.clips.filter((other: Clip) => placed.start < other.start + other.sourceEnd - other.sourceStart - 0.001 && placed.start + duration * ((placed.tempoBpm ?? DEFAULT_BPM) / bpm) > other.start + 0.001);
                             if (conflicts.length) {
                               const direction = placed.start >= clip.start ? 1 : -1;
-                              const edge = direction >= 0 ? Math.max(...conflicts.map((other: Clip) => other.start + other.sourceEnd - other.sourceStart)) : Math.max(0, Math.min(...conflicts.map((other: Clip) => other.start)) - duration);
+                              const edge = direction >= 0 ? Math.max(...conflicts.map((other: Clip) => other.start + (other.sourceEnd - other.sourceStart) * ((other.tempoBpm ?? DEFAULT_BPM) / bpm))) : Math.max(0, Math.min(...conflicts.map((other: Clip) => other.start)) - duration);
                               placed = { ...placed, start: edge };
                             }
                           }
