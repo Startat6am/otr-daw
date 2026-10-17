@@ -385,7 +385,9 @@ export default function App() {
   async function scheduleFrom(position: number, context: AudioContext) {
     stopSources();
     ensureMixer(context, tracksRef.current);
-    const startAt = context.currentTime + .08;
+    const looping = loopEnabled && loopEnd > loopStart;
+    const playbackLimit = looping ? loopEnd : Number.POSITIVE_INFINITY;
+    const startAt = context.currentTime + (looping ? .01 : .08);
     clockStartRef.current = startAt;
     playheadRef.current = position;
     for (const track of tracksRef.current) for (const clip of track.clips) {
@@ -409,7 +411,7 @@ export default function App() {
         stretchedBuffersRef.current.set(cacheKey, stretched);
       }
       const offset = elapsed;
-      const duration = clipDuration - elapsed;
+      const duration = Math.min(clipDuration - elapsed, playbackLimit - Math.max(position, clip.start));
       if (duration <= 0) continue;
       const source = context.createBufferSource();
       source.buffer = stretched;
@@ -500,19 +502,20 @@ export default function App() {
         }
         const position = Math.max(0, context.currentTime - clockStartRef.current + playheadRef.current);
         if (loopEnabled && loopEnd > loopStart && position >= loopEnd) {
-          void scheduleFrom(loopStart, context);
+          playheadRef.current = loopStart;
           setPlayhead(loopStart);
-          return;
-        }
-        setPlayhead(position);
-        const end = Math.max(0, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clipTimelineDuration(clip))));
-        if (end > 0 && position >= end) {
-          playingRef.current = false;
-          setIsPlaying(false);
-          stopSources();
-          playheadRef.current = 0;
-          setPlayhead(0);
-          return;
+          void scheduleFrom(loopStart, context);
+        } else {
+          setPlayhead(position);
+          const end = Math.max(0, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clipTimelineDuration(clip))));
+          if (!(loopEnabled && loopEnd > loopStart) && end > 0 && position >= end) {
+            playingRef.current = false;
+            setIsPlaying(false);
+            stopSources();
+            playheadRef.current = 0;
+            setPlayhead(0);
+            return;
+          }
         }
       }
       frame = requestAnimationFrame(tick);
@@ -803,7 +806,8 @@ export default function App() {
         <div className="timeline-heading">
           <div><p className="eyebrow">ARRANGEMENT</p><h2>Timeline</h2></div><button className="add-track-button" onClick={addTrack} disabled={tracks.length >= 16}>＋ Add track</button>
         </div>
-        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><div className="bpm-control"><span>BPM</span><div className="bpm-wheel" role="slider" tabIndex={0} aria-label="Tempo BPM: swipe up or down to change" aria-valuemin={MIN_BPM} aria-valuemax={MAX_BPM} aria-valuenow={bpm} onPointerDown={onBpmWheelStart} onPointerMove={onBpmWheelMove} onPointerUp={() => { bpmGestureRef.current = null; }} onPointerCancel={() => { bpmGestureRef.current = null; }} onKeyDown={(event) => { if (event.key === "ArrowUp") { event.preventDefault(); applyBpm(bpm + 1); } else if (event.key === "ArrowDown") { event.preventDefault(); applyBpm(bpm - 1); } else if (event.key === "PageUp") { event.preventDefault(); applyBpm(bpm + 5); } else if (event.key === "PageDown") { event.preventDefault(); applyBpm(bpm - 5); } }}><strong>{bpm}</strong></div><div className="transport transport-inline" aria-label="Playback controls"><button className="transport-button" onClick={stopTransport} aria-label="Stop playback">■</button><button className="transport-button play-button" onClick={() => void toggleTransport()} aria-label={isPlaying ? "Pause playback" : "Start playback"}>{isPlaying ? "Ⅱ" : "▶"}</button><span className="time-readout">{formatTime(playhead)}</span></div></div><button onClick={undoEdit} disabled={undoStackRef.current.length === 0} aria-label="Undo last edit">↶ Undo</button><button onClick={redoEdit} disabled={redoStackRef.current.length === 0} aria-label="Redo last undone edit">↷ Redo</button><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><label className="grid-select">Grid<select aria-label="Snap grid division" value={gridDivision} onChange={(event) => setGridDivision(Number(event.currentTarget.value))}><option value={2}>1/2</option><option value={4}>1/4</option><option value={8}>1/8</option><option value={16}>1/16</option><option value={32}>1/32</option></select></label><button className={overlapEnabled ? "tool-active" : ""} aria-pressed={overlapEnabled} onClick={() => setOverlapEnabled((value) => !value)}>Overlap {overlapEnabled ? "On" : "Off"}</button><button className={trimMode ? "tool-active" : ""} aria-pressed={trimMode} onClick={() => setTrimMode((value) => !value)}>✂ Trim {trimMode ? "On" : "Off"}</button><button className={loopEnabled ? "tool-active" : ""} aria-pressed={loopEnabled} onClick={() => setLoopEnabled((value) => !value)}>↻ Loop {loopEnabled ? "On" : "Off"}</button><button onClick={() => { const next = snapTime(playhead); const step = BEAT * 4 / gridDivision; setLoopStart(next); if (next >= loopEnd) setLoopEnd(next + step); setStatus("Loop start set at playhead."); }}>Loop start</button><button onClick={() => { const next = snapTime(playhead); setLoopEnd(Math.max(next, loopStart + BEAT * 4 / gridDivision)); setStatus("Loop end set at playhead."); }}>Loop end</button><span className="loop-readout">{formatTime(loopStart)}–{formatTime(loopEnd)}</span><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={duplicateSelected} disabled={!selectedClip}>Duplicate</button><button onClick={copySelected} disabled={!selectedClip}>Copy</button><button onClick={pasteClip} disabled={!clipboardClip}>Paste</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
+        <div className="edit-tools"><span>Tap ruler to move playhead · drag empty space to scroll</span><span>BPM</span><div className="bpm-wheel" role="slider" tabIndex={0} aria-label="Tempo BPM: swipe up or down to change" aria-valuemin={MIN_BPM} aria-valuemax={MAX_BPM} aria-valuenow={bpm} onPointerDown={onBpmWheelStart} onPointerMove={onBpmWheelMove} onPointerUp={() => { bpmGestureRef.current = null; }} onPointerCancel={() => { bpmGestureRef.current = null; }} onKeyDown={(event) => { if (event.key === "ArrowUp") { event.preventDefault(); applyBpm(bpm + 1); } else if (event.key === "ArrowDown") { event.preventDefault(); applyBpm(bpm - 1); } else if (event.key === "PageUp") { event.preventDefault(); applyBpm(bpm + 5); } else if (event.key === "PageDown") { event.preventDefault(); applyBpm(bpm - 5); } }}><strong>{bpm}</strong></div><div className="transport transport-inline" aria-label="Playback controls"><button className="transport-button" onClick={stopTransport} aria-label="Stop playback">■</button><button className="transport-button play-button" onClick={() => void toggleTransport()} aria-label={isPlaying ? "Pause playback" : "Start playback"}>{isPlaying ? "Ⅱ" : "▶"}</button><span className="time-readout">{formatTime(playhead)}</span></div><button onClick={undoEdit} disabled={undoStackRef.current.length === 0} aria-label="Undo last edit">↶ Undo</button><button onClick={redoEdit} disabled={redoStackRef.current.length === 0} aria-label="Redo last undone edit">↷ Redo</button><button className={snapEnabled ? "tool-active" : ""} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}>Snap {snapEnabled ? "On" : "Off"}</button><label className="grid-select">Grid<select aria-label="Snap grid division" value={gridDivision} onChange={(event) => setGridDivision(Number(event.currentTarget.value))}><option value={2}>1/2</option><option value={4}>1/4</option><option value={8}>1/8</option><option value={16}>1/16</option><option value={32}>1/32</option></select></label><button className={overlapEnabled ? "tool-active" : ""} aria-pressed={overlapEnabled} onClick={() => setOverlapEnabled((value) => !value)}>Overlap {overlapEnabled ? "On" : "Off"}</button><button className={trimMode ? "tool-active" : ""} aria-pressed={trimMode} onClick={() => setTrimMode((value) => !value)}>✂ Trim {trimMode ? "On" : "Off"}</button><button className={loopEnabled ? "tool-active" : ""} aria-pressed={loopEnabled} onClick={() => setLoopEnabled((value) => !value)}>↻ Loop {loopEnabled ? "On" : "Off"}</button><button onClick={() => { const next = snapTime(playhead); const step = BEAT * 4 / gridDivision; setLoopStart(next); if (next >= loopEnd) setLoopEnd(next + step); setStatus("Loop start set at playhead."); }}>Loop start</button><button onClick={() => { const next = snapTime(playhead); setLoopEnd(Math.max(next, loopStart + BEAT * 4 / gridDivision)); setStatus("Loop end set at playhead."); }}>Loop end</button><span className="loop-readout">{formatTime(loopStart)}–{formatTime(loopEnd)}</span><div className="zoom-control" aria-label="Timeline zoom"><button aria-label="Zoom out" onClick={() => setTimelineZoom((value) => Math.max(.5, Math.round((value - .25) * 100) / 100))} disabled={timelineZoom <= .5}>−</button><span>{Math.round(timelineZoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setTimelineZoom((value) => Math.min(2, Math.round((value + .25) * 100) / 100))} disabled={timelineZoom >= 2}>+</button></div><button onClick={splitSelected} disabled={!selectedClip}>Split at playhead</button><button onClick={duplicateSelected} disabled={!selectedClip}>Duplicate</button><button onClick={copySelected} disabled={!selectedClip}>Copy</button><button onClick={pasteClip} disabled={!clipboardClip}>Paste</button><button onClick={removeSelected} disabled={!selectedClip}>Delete clip</button></div>
+        <div className="playback-bpm-panel"><div className="bpm-control"><span>BPM</span><div className="bpm-wheel" role="slider" tabIndex={0} aria-label="Tempo BPM: swipe up or down to change" aria-valuemin={MIN_BPM} aria-valuemax={MAX_BPM} aria-valuenow={bpm} onPointerDown={onBpmWheelStart} onPointerMove={onBpmWheelMove} onPointerUp={() => { bpmGestureRef.current = null; }} onPointerCancel={() => { bpmGestureRef.current = null; }} onKeyDown={(event) => { if (event.key === "ArrowUp") { event.preventDefault(); applyBpm(bpm + 1); } else if (event.key === "ArrowDown") { event.preventDefault(); applyBpm(bpm - 1); } else if (event.key === "PageUp") { event.preventDefault(); applyBpm(bpm + 5); } else if (event.key === "PageDown") { event.preventDefault(); applyBpm(bpm - 5); } }}><strong>{bpm}</strong></div><div className="transport transport-inline" aria-label="Playback controls"><button className="transport-button" onClick={stopTransport} aria-label="Stop playback">■</button><button className="transport-button play-button" onClick={() => void toggleTransport()} aria-label={isPlaying ? "Pause playback" : "Start playback"}>{isPlaying ? "Ⅱ" : "▶"}</button><span className="time-readout">{formatTime(playhead)}</span></div></div></div>
         {selectedClip && (() => {
           const selected = tracks.flatMap((track) => track.clips.map((clip) => ({ clip, track }))).find((item) => item.clip.id === selectedClip);
           if (!selected) return null;
