@@ -10,17 +10,69 @@ type ImportedAudio = {
   channels: number;
   buffer: AudioBuffer;
   audioData: ArrayBuffer;
+  bpm?: number;
 };
 type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number; tempoBpm?: number; fadeIn?: number; fadeOut?: number };
-type Track = { id: string; name: string; clips: Clip[]; gain: number; muted: boolean; solo: boolean };
+type Track = { id: string; name: string; clips: Clip[]; gain: number; pan?: number; muted: boolean; solo: boolean };
 const DEFAULT_BPM = 120;
 const MIN_BPM = 40;
 const MAX_BPM = 240;
 const BASE_PX_PER_SECOND = 58;
 const INITIAL_TRACKS: Track[] = [
-  { id: "track-1", name: "Track 1", clips: [], gain: 1, muted: false, solo: false },
-  { id: "track-2", name: "Track 2", clips: [], gain: 1, muted: false, solo: false },
+  { id: "track-1", name: "Track 1", clips: [], gain: 1, pan: 0, muted: false, solo: false },
+  { id: "track-2", name: "Track 2", clips: [], gain: 1, pan: 0, muted: false, solo: false },
 ];
+
+
+function detectBpm(buffer: AudioBuffer): number | undefined {
+  // Build a lightweight onset envelope at 100 Hz, capped at two minutes.
+  const channelCount = buffer.numberOfChannels;
+  const hop = Math.max(1, Math.round(buffer.sampleRate / 100));
+  const frameCount = Math.min(Math.floor(buffer.length / hop), 12000);
+  if (frameCount < 500) return undefined;
+  const energy = new Float32Array(frameCount);
+  for (let frame = 0; frame < frameCount; frame++) {
+    const start = frame * hop;
+    const end = Math.min(buffer.length, start + hop);
+    let sum = 0;
+    for (let channel = 0; channel < channelCount; channel++) {
+      const samples = buffer.getChannelData(channel);
+      for (let i = start; i < end; i++) sum += samples[i] * samples[i];
+    }
+    energy[frame] = Math.sqrt(sum / Math.max(1, (end - start) * channelCount));
+  }
+  const onset = new Float32Array(frameCount);
+  let mean = 0;
+  for (let i = 1; i < frameCount; i++) {
+    onset[i] = Math.max(0, energy[i] - energy[i - 1]);
+    mean += onset[i];
+  }
+  mean /= frameCount;
+  if (mean < 0.00002) return undefined;
+  let variance = 0;
+  for (let i = 0; i < frameCount; i++) {
+    onset[i] = Math.max(0, onset[i] - mean * 0.35);
+    variance += onset[i] * onset[i];
+  }
+  if (variance < 1e-8) return undefined;
+  let bestLag = 0;
+  let bestScore = 0;
+  const minLag = Math.floor(6000 / MAX_BPM);
+  const maxLag = Math.ceil(6000 / MIN_BPM);
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let score = 0;
+    for (let i = lag; i < frameCount; i++) score += onset[i] * onset[i - lag];
+    // Prefer a genuine periodic peak while mildly compensating for longer lags.
+    score /= Math.sqrt(frameCount - lag);
+    if (score > bestScore) { bestScore = score; bestLag = lag; }
+  }
+  if (!bestLag || bestScore <= 0) return undefined;
+  let detected = Math.round(6000 / bestLag);
+  // Bring common half/double-time estimates into a practical musical range.
+  while (detected < 70) detected *= 2;
+  while (detected > 180) detected /= 2;
+  return Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(detected)));
+}
 
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -121,6 +173,8 @@ export default function App() {
   const [masterLevel, setMasterLevel] = useState(0);
   const masterGainRef = useRef(0.85);
   const mixerNodesRef = useRef<Map<string, GainNode>>(new Map());
+  const pannerNodesRef = useRef<Map<string, StereoPannerNode>>(new Map());
+  const trackKnobGestureRef = useRef<{ trackId: string; kind: "pan" | "gain"; startY: number; startValue: number; pointerId: number } | null>(null);
   const masterNodeRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const [, setHistoryVersion] = useState(0);
@@ -183,13 +237,13 @@ export default function App() {
             try {
               const audioData = item.audioData.slice(0);
               const buffer = await context.decodeAudioData(audioData.slice(0));
-              restoredAssets.push({ ...item, audioData, buffer, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels });
+              restoredAssets.push({ ...item, audioData, buffer, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, bpm: typeof item.bpm === "number" ? item.bpm : detectBpm(buffer) });
             } catch {
               // Keep the rest of the project available if one stored audio file is no longer decodable.
             }
           }
           if (cancelled) return;
-          const restoredTracks = saved.tracks.map((track) => ({ ...track, gain: Number.isFinite(track.gain) ? track.gain : 1, muted: Boolean(track.muted), solo: Boolean(track.solo), clips: track.clips.filter((clip) => restoredAssets.some((asset) => asset.id === clip.assetId)) }));
+          const restoredTracks = saved.tracks.map((track) => ({ ...track, gain: Number.isFinite(track.gain) ? track.gain : 1, pan: Number.isFinite(track.pan) ? Math.max(-1, Math.min(1, track.pan!)) : 0, muted: Boolean(track.muted), solo: Boolean(track.solo), clips: track.clips.filter((clip) => restoredAssets.some((asset) => asset.id === clip.assetId)) }));
           setAssets(restoredAssets);
           tracksRef.current = restoredTracks;
           setTracks(restoredTracks);
@@ -221,7 +275,7 @@ export default function App() {
       const project: SavedProject = {
         schemaVersion: 1,
         updatedAt: new Date().toISOString(),
-        assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: asset.audioData })),
+        assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: asset.audioData, bpm: asset.bpm })),
         tracks,
         settings: { snapEnabled, timelineZoom, masterGain, bpm },
       };
@@ -265,7 +319,7 @@ export default function App() {
         schemaVersion: 1,
         updatedAt: new Date().toISOString(),
         projectName: projectName.trim() || "Untitled project",
-        assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: bufferToBase64(asset.audioData) })),
+        assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: bufferToBase64(asset.audioData), bpm: asset.bpm })),
         tracks,
         settings: { snapEnabled, timelineZoom, masterGain, bpm },
       };
@@ -301,6 +355,7 @@ export default function App() {
       const restoredTracks: Track[] = parsed.tracks.map((track: Track) => ({
         ...track,
         gain: Number.isFinite(track.gain) ? track.gain : 1,
+        pan: Number.isFinite(track.pan) ? Math.max(-1, Math.min(1, track.pan!)) : 0,
         muted: Boolean(track.muted),
         solo: Boolean(track.solo),
         clips: track.clips.filter((clip) => restoredAssets.some((asset) => asset.id === clip.assetId)),
@@ -349,16 +404,21 @@ export default function App() {
     const soloActive = currentTracks.some((track) => track.solo);
     currentTracks.forEach((track) => {
       let node = mixerNodesRef.current.get(track.id);
-      if (!node || node.context !== context) {
+      let panner = pannerNodesRef.current.get(track.id);
+      if (!node || node.context !== context || !panner || panner.context !== context) {
         node = context.createGain();
-        node.connect(masterNodeRef.current!);
+        panner = context.createStereoPanner();
+        node.connect(panner);
+        panner.connect(masterNodeRef.current!);
         mixerNodesRef.current.set(track.id, node);
+        pannerNodesRef.current.set(track.id, panner);
       }
       const audible = !track.muted && (!soloActive || track.solo);
       node.gain.setTargetAtTime(audible ? track.gain : 0, context.currentTime, 0.015);
+      panner.pan.setTargetAtTime(Math.max(-1, Math.min(1, track.pan ?? 0)), context.currentTime, 0.015);
     });
   }
-  function changeTrack(trackId: string, change: Partial<Pick<Track, "gain" | "muted" | "solo">>) {
+  function changeTrack(trackId: string, change: Partial<Pick<Track, "gain" | "pan" | "muted" | "solo">>) {
     const next = tracksRef.current.map((track) => track.id === trackId ? { ...track, ...change } : track);
     tracksRef.current = next;
     setTracks(next);
@@ -549,7 +609,8 @@ export default function App() {
         if (!/\.(wav|mp3|ogg|oga)$/i.test(file.name) && !file.type.startsWith("audio/")) continue;
         const audioData = await file.arrayBuffer();
         const buffer = await context.decodeAudioData(audioData.slice(0));
-        imported.push({ id: uid(), name: file.name, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, buffer, audioData });
+        const detectedBpm = detectBpm(buffer);
+        imported.push({ id: uid(), name: file.name, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, buffer, audioData, bpm: detectedBpm });
       }
       if (!imported.length) setStatus("No supported audio files found. Choose WAV, MP3 or OGG.");
       else {
@@ -600,11 +661,12 @@ export default function App() {
     if (track.clips.some((clip) => clip.id === selectedClip)) setSelectedClip(null);
     if (clipboardClip?.trackId === trackId) setClipboardClip(null);
     mixerNodesRef.current.delete(trackId);
+    pannerNodesRef.current.delete(trackId);
     setStatus(track.name + " removed.");
   }
 
   function addClip(asset: ImportedAudio, trackId: string) {
-    const clip: Clip = { id: uid(), assetId: asset.id, start: 0, sourceStart: 0, sourceEnd: asset.duration, tempoBpm: bpm };
+    const clip: Clip = { id: uid(), assetId: asset.id, start: 0, sourceStart: 0, sourceEnd: asset.duration, tempoBpm: asset.bpm ?? bpm };
     commitTracks((current) => current.map((track) => track.id === trackId ? { ...track, clips: [...track.clips, clip] } : track));
     setSelectedClip(clip.id);
     setStatus(`Added ${asset.name} to ${tracks.find((track) => track.id === trackId)?.name}.`);
@@ -747,6 +809,26 @@ export default function App() {
     setBpm(next);
     stretchedBuffersRef.current.clear();
   }
+  function startTrackKnob(event: React.PointerEvent<HTMLDivElement>, trackId: string, kind: "pan" | "gain", value: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    trackKnobGestureRef.current = { trackId, kind, startY: event.clientY, startValue: value, pointerId: event.pointerId };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function moveTrackKnob(event: React.PointerEvent<HTMLDivElement>) {
+    const gesture = trackKnobGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    const delta = (gesture.startY - event.clientY) / 90;
+    const value = gesture.kind === "pan"
+      ? Math.max(-1, Math.min(1, gesture.startValue + delta * 2))
+      : Math.max(0, Math.min(1, gesture.startValue + delta));
+    changeTrack(gesture.trackId, gesture.kind === "pan" ? { pan: Math.round(value * 100) / 100 } : { gain: Math.round(value * 100) / 100 });
+  }
+  function endTrackKnob(event: React.PointerEvent<HTMLDivElement>) {
+    if (trackKnobGestureRef.current?.pointerId === event.pointerId) trackKnobGestureRef.current = null;
+  }
+
   function onBpmWheelStart(event: React.PointerEvent<HTMLDivElement>) {
     event.preventDefault();
     bpmGestureRef.current = { startY: event.clientY, startBpm: bpm, lastStep: 0 };
@@ -799,7 +881,7 @@ export default function App() {
           <article className="asset-card" key={asset.id}>
             <div className="asset-meta">
               <span className="track-number">{String(index + 1).padStart(2, "0")}</span>
-              <div className="asset-title"><strong title={asset.name}>{asset.name}</strong><span>{formatTime(asset.duration)} · {asset.sampleRate.toLocaleString()} Hz · {asset.channels} ch</span></div>
+              <div className="asset-title"><strong title={asset.name}>{asset.name}</strong><span>{formatTime(asset.duration)} · {asset.sampleRate.toLocaleString()} Hz · {asset.channels} ch · {asset.bpm ? `BPM ~${asset.bpm}` : "BPM —"}</span></div>
             </div>
             <div className="asset-actions">{tracks.map((track) => <button className="add-clip-button" key={track.id} onClick={() => addClip(asset, track.id)}>+ {track.name}</button>)}</div>
           </article>
@@ -901,7 +983,7 @@ export default function App() {
               {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * BEAT * 4 * PX_PER_SECOND }}><span>{String(i + 1).padStart(2, "0")}</span></div>)}
             </div>
             {tracks.map((track) => <div className="timeline-track" data-track-id={track.id} key={track.id} style={{ width: timelineWidth, backgroundImage: `repeating-linear-gradient(to right, #252a28 0, #252a28 1px, transparent 1px, transparent ${Math.max(1, BEAT * 4 / gridDivision * PX_PER_SECOND)}px)` }}>
-              <div className="track-label"><span title={track.name}>{trackSidebarCollapsed ? String(tracks.findIndex((item) => item.id === track.id) + 1).padStart(2, "0") : track.name}</span><div className="track-label-actions"><button type="button" title={"Rename " + track.name} aria-label={"Rename " + track.name} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); renameTrack(track.id); }}>✎</button><button type="button" title={"Delete " + track.name} aria-label={"Delete " + track.name} disabled={tracks.length <= 1} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); removeTrack(track.id); }}>×</button></div></div>
+              <div className="track-label"><span title={track.name}>{trackSidebarCollapsed ? String(tracks.findIndex((item) => item.id === track.id) + 1).padStart(2, "0") : track.name}</span>{!trackSidebarCollapsed && <div className="track-mini-controls"><div className="track-knob-wrap"><div className="track-knob pan-knob" role="slider" tabIndex={0} aria-label={track.name + " pan"} aria-valuemin={-100} aria-valuemax={100} aria-valuenow={Math.round((track.pan ?? 0) * 100)} title={`PAN ${Math.round((track.pan ?? 0) * 100)}`} style={{ "--knob-angle": `${(track.pan ?? 0) * 135}deg` } as React.CSSProperties} onPointerDown={(event) => startTrackKnob(event, track.id, "pan", track.pan ?? 0)} onPointerMove={moveTrackKnob} onPointerUp={endTrackKnob} onPointerCancel={endTrackKnob} onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowDown") { event.preventDefault(); changeTrack(track.id, { pan: Math.max(-1, (track.pan ?? 0) - .05) }); } else if (event.key === "ArrowRight" || event.key === "ArrowUp") { event.preventDefault(); changeTrack(track.id, { pan: Math.min(1, (track.pan ?? 0) + .05) }); } }}><span /></div><small>PAN</small></div><div className="track-knob-wrap"><div className="track-knob volume-knob" role="slider" tabIndex={0} aria-label={track.name + " volume"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(track.gain * 100)} title={`VOL ${Math.round(track.gain * 100)}%`} style={{ "--knob-angle": `${-135 + track.gain * 270}deg` } as React.CSSProperties} onPointerDown={(event) => startTrackKnob(event, track.id, "gain", track.gain)} onPointerMove={moveTrackKnob} onPointerUp={endTrackKnob} onPointerCancel={endTrackKnob} onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); changeTrack(track.id, { gain: Math.max(0, track.gain - .05) }); } else if (event.key === "ArrowUp" || event.key === "ArrowRight") { event.preventDefault(); changeTrack(track.id, { gain: Math.min(1, track.gain + .05) }); } }}><span /></div><small>VOL</small></div></div>}<div className="track-label-actions"><button type="button" title={"Rename " + track.name} aria-label={"Rename " + track.name} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); renameTrack(track.id); }}>✎</button><button type="button" title={"Delete " + track.name} aria-label={"Delete " + track.name} disabled={tracks.length <= 1} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); removeTrack(track.id); }}>×</button></div></div>
               {track.clips.map((clip) => {
                 const asset = assets.find((item) => item.id === clip.assetId);
                 if (!asset) return null;
