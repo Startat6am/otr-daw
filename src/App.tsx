@@ -673,7 +673,7 @@ export default function App() {
 
   const maxEnd = Math.max(16, ...tracks.flatMap((track) => track.clips.map((clip) => clip.start + clip.sourceEnd - clip.sourceStart + 2)));
   const timelineWidth = maxEnd * PX_PER_SECOND;
-  const rulerCount = Math.ceil(maxEnd / 2);
+  const rulerCount = Math.ceil(maxEnd / (BEAT * 4));
   function applyBpm(value: number) {
     const next = Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(value)));
     setBpm(next);
@@ -790,9 +790,9 @@ export default function App() {
               const rect = event.currentTarget.getBoundingClientRect();
               seekPlayhead((event.clientX - rect.left) / PX_PER_SECOND);
             }}>
-              {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * 2 * PX_PER_SECOND }}><span>{String(i + 1).padStart(2, "0")}</span></div>)}
+              {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * BEAT * 4 * PX_PER_SECOND }}><span>{String(i + 1).padStart(2, "0")}</span></div>)}
             </div>
-            {tracks.map((track) => <div className="timeline-track" data-track-id={track.id} key={track.id} style={{ width: timelineWidth }}>
+            {tracks.map((track) => <div className="timeline-track" data-track-id={track.id} key={track.id} style={{ width: timelineWidth, backgroundImage: `repeating-linear-gradient(to right, #252a28 0, #252a28 1px, transparent 1px, transparent ${Math.max(1, BEAT * 4 / gridDivision * PX_PER_SECOND)}px)` }}>
               <div className="track-label"><span title={track.name}>{trackSidebarCollapsed ? String(tracks.findIndex((item) => item.id === track.id) + 1).padStart(2, "0") : track.name}</span><div className="track-label-actions"><button type="button" title={"Rename " + track.name} aria-label={"Rename " + track.name} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); renameTrack(track.id); }}>✎</button><button type="button" title={"Delete " + track.name} aria-label={"Delete " + track.name} disabled={tracks.length <= 1} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); removeTrack(track.id); }}>×</button></div></div>
               {track.clips.map((clip) => {
                 const asset = assets.find((item) => item.id === clip.assetId);
