@@ -162,16 +162,18 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 @media (max-width: 390px) { .mixer-panel { padding: 14px; } .mixer-channels { grid-template-columns: repeat(2, minmax(0, 1fr)); } .master-channel { grid-column: 1 / -1; } }
 
 
-/* Selected clip timing inspector */
-.clip-inspector { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin: 0 18px 12px; padding: 12px; border: 1px solid #35423b; border-radius: 10px; background: #151a17; }
+/* Selected clip inspector floats over the timeline so selecting a clip never shifts tracks */
+.timeline-panel { position: relative; }
+.clip-inspector { position: absolute; z-index: 20; top: 104px; right: 14px; display: flex; align-items: end; flex-wrap: wrap; gap: 10px; width: min(620px, calc(100% - 28px)); margin: 0; padding: 12px 42px 12px 12px; border: 1px solid #35423b; border-radius: 10px; background: rgba(21, 26, 23, .97); box-shadow: 0 12px 32px rgba(0, 0, 0, .38); backdrop-filter: blur(12px); }
 .clip-inspector > strong { align-self: center; margin-right: auto; color: var(--mint); font-size: 11px; letter-spacing: .04em; }
 .clip-inspector label { display: flex; align-items: center; gap: 7px; color: #9ba39f; font: 10px 'DM Mono', monospace; }
-.clip-inspector input { width: 94px; min-height: 36px; padding: 6px 8px; border: 1px solid #39433d; border-radius: 7px; background: #0f1210; color: #e4eee8; font: 12px 'DM Mono', monospace; }
+.clip-inspector input { width: 84px; min-height: 36px; padding: 6px 8px; border: 1px solid #39433d; border-radius: 7px; background: #0f1210; color: #e4eee8; font: 12px 'DM Mono', monospace; }
+.clip-inspector-close { position: absolute; top: 7px; right: 8px; width: 28px; height: 28px; padding: 0; border: 1px solid #39433d; border-radius: 7px; background: #202722; color: #dce8e0; font-size: 20px; line-height: 1; }
 @media (max-width: 520px) {
-  .clip-inspector { margin-left: 12px; margin-right: 12px; gap: 9px; }
+  .clip-inspector { top: 92px; right: 8px; width: calc(100% - 16px); padding: 10px 38px 10px 10px; gap: 8px; }
   .clip-inspector > strong { flex: 0 0 100%; }
-  .clip-inspector label { flex: 1; justify-content: space-between; }
-  .clip-inspector input { width: 82px; }
+  .clip-inspector label { flex: 1 1 calc(50% - 8px); justify-content: space-between; min-width: 0; }
+  .clip-inspector input { width: 72px; min-width: 0; }
 }
 
 
