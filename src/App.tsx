@@ -822,6 +822,11 @@ export default function App() {
           </div>;
         })()}
         <div className={"timeline-scroll " + (trackSidebarCollapsed ? "sidebar-collapsed" : "sidebar-expanded")}
+          onClick={(event) => {
+            const target = event.target as HTMLElement;
+            if (target.closest(".ruler, .timeline-clip, .track-label, button, input, select, label")) return;
+            setSelectedClip(null);
+          }}
           onPointerDown={(event) => {
             const target = event.target as HTMLElement;
             if (target.closest(".ruler, .timeline-clip, .track-label, button, input, select, label")) return;
@@ -864,7 +869,7 @@ export default function App() {
                   }}
                   onPointerMove={(event) => {
                     const drag = dragRef.current;
-                    if (!drag || drag.clipId !== clip.id || !event.buttons) return;
+                    if (!drag || drag.clipId !== clip.id) return;
                     const delta = (event.clientX - drag.startX) / PX_PER_SECOND;
                     if (Math.abs(event.clientX - drag.startX) > 3) drag.moved = true;
                     if (drag.mode === "fadeIn") {
