@@ -101,6 +101,9 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
+  const [clipInspectorCollapsed, setClipInspectorCollapsed] = useState(false);
+  const [clipInspectorPosition, setClipInspectorPosition] = useState<{ x: number; y: number } | null>(null);
+  const clipInspectorDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const [clipboardClip, setClipboardClip] = useState<{ clip: Clip; trackId: string } | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [gridDivision, setGridDivision] = useState(4);
@@ -825,13 +828,46 @@ export default function App() {
           const selected = tracks.flatMap((track) => track.clips.map((clip) => ({ clip, track }))).find((item) => item.clip.id === selectedClip);
           if (!selected) return null;
           const duration = clipTimelineDuration(selected.clip);
-          return <div className="clip-inspector" aria-label="Selected clip settings">
-            <strong>Selected clip</strong>
-            <button className="clip-inspector-close" type="button" aria-label="Close clip settings" onClick={() => setSelectedClip(null)}>×</button>
-            <label>Start (sec)<input aria-label="Clip start time in seconds" type="number" min="0" step={snapEnabled ? BEAT * 4 / gridDivision : 0.01} value={Number(selected.clip.start.toFixed(3))} onChange={(event) => setSelectedClipTiming(Number(event.currentTarget.value), duration)} /></label>
-            <label>Length (sec)<input aria-label="Clip duration in seconds" type="number" min="0.05" max={selected.clip.sourceEnd - selected.clip.sourceStart + (assets.find((asset) => asset.id === selected.clip.assetId)?.duration ?? 0)} step={snapEnabled ? BEAT * 4 / gridDivision : 0.01} value={Number(duration.toFixed(3))} onChange={(event) => setSelectedClipTiming(selected.clip.start, Number(event.currentTarget.value))} /></label>
-            <label>Fade In (sec)<input aria-label="Clip fade in duration in seconds" type="number" min="0" max={duration} step="0.05" value={Number(Math.min(duration, selected.clip.fadeIn ?? 0).toFixed(2))} onChange={(event) => updateClip(selected.clip.id, { fadeIn: Math.max(0, Math.min(duration, Number(event.currentTarget.value) || 0)) })} /></label>
-            <label>Fade Out (sec)<input aria-label="Clip fade out duration in seconds" type="number" min="0" max={duration} step="0.05" value={Number(Math.min(duration, selected.clip.fadeOut ?? 0).toFixed(2))} onChange={(event) => updateClip(selected.clip.id, { fadeOut: Math.max(0, Math.min(duration, Number(event.currentTarget.value) || 0)) })} /></label>
+          return <div className={`clip-inspector${clipInspectorCollapsed ? " clip-inspector-collapsed" : ""}`} aria-label="Selected clip settings" style={clipInspectorPosition ? { left: clipInspectorPosition.x, top: clipInspectorPosition.y, right: "auto" } : undefined}>
+            <div className="clip-inspector-header"
+              onPointerDown={(event) => {
+                if ((event.target as HTMLElement).closest("button")) return;
+                const panel = event.currentTarget.closest(".timeline-panel") as HTMLElement | null;
+                const inspector = event.currentTarget.parentElement;
+                if (!panel || !inspector) return;
+                const panelRect = panel.getBoundingClientRect();
+                const rect = inspector.getBoundingClientRect();
+                const originX = rect.left - panelRect.left;
+                const originY = rect.top - panelRect.top;
+                clipInspectorDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX, originY };
+                event.currentTarget.setPointerCapture(event.pointerId);
+              }}
+              onPointerMove={(event) => {
+                const drag = clipInspectorDragRef.current;
+                if (!drag || drag.pointerId !== event.pointerId) return;
+                const panel = event.currentTarget.closest(".timeline-panel") as HTMLElement | null;
+                const inspector = event.currentTarget.parentElement;
+                if (!panel || !inspector) return;
+                const maxX = Math.max(0, panel.clientWidth - inspector.offsetWidth);
+                const maxY = Math.max(0, panel.clientHeight - 38);
+                setClipInspectorPosition({
+                  x: Math.max(0, Math.min(maxX, drag.originX + event.clientX - drag.startX)),
+                  y: Math.max(0, Math.min(maxY, drag.originY + event.clientY - drag.startY)),
+                });
+              }}
+              onPointerUp={(event) => { if (clipInspectorDragRef.current?.pointerId === event.pointerId) clipInspectorDragRef.current = null; }}
+              onPointerCancel={() => { clipInspectorDragRef.current = null; }}
+            >
+              <strong>Selected clip</strong>
+              <button className="clip-inspector-collapse" type="button" aria-label={clipInspectorCollapsed ? "Expand clip settings" : "Collapse clip settings"} title={clipInspectorCollapsed ? "Expand" : "Collapse"} onPointerDown={(event) => event.stopPropagation()} onClick={() => setClipInspectorCollapsed((value) => !value)}>{clipInspectorCollapsed ? "▢" : "−"}</button>
+              <button className="clip-inspector-close" type="button" aria-label="Close clip settings" title="Close" onPointerDown={(event) => event.stopPropagation()} onClick={() => { setSelectedClip(null); setClipInspectorCollapsed(false); setClipInspectorPosition(null); }}>×</button>
+            </div>
+            {!clipInspectorCollapsed && <>
+              <label>Start (sec)<input aria-label="Clip start time in seconds" type="number" min="0" step={snapEnabled ? BEAT * 4 / gridDivision : 0.01} value={Number(selected.clip.start.toFixed(3))} onChange={(event) => setSelectedClipTiming(Number(event.currentTarget.value), duration)} /></label>
+              <label>Length (sec)<input aria-label="Clip duration in seconds" type="number" min="0.05" max={selected.clip.sourceEnd - selected.clip.sourceStart + (assets.find((asset) => asset.id === selected.clip.assetId)?.duration ?? 0)} step={snapEnabled ? BEAT * 4 / gridDivision : 0.01} value={Number(duration.toFixed(3))} onChange={(event) => setSelectedClipTiming(selected.clip.start, Number(event.currentTarget.value))} /></label>
+              <label>Fade In (sec)<input aria-label="Clip fade in duration in seconds" type="number" min="0" max={duration} step="0.05" value={Number(Math.min(duration, selected.clip.fadeIn ?? 0).toFixed(2))} onChange={(event) => updateClip(selected.clip.id, { fadeIn: Math.max(0, Math.min(duration, Number(event.currentTarget.value) || 0)) })} /></label>
+              <label>Fade Out (sec)<input aria-label="Clip fade out duration in seconds" type="number" min="0" max={duration} step="0.05" value={Number(Math.min(duration, selected.clip.fadeOut ?? 0).toFixed(2))} onChange={(event) => updateClip(selected.clip.id, { fadeOut: Math.max(0, Math.min(duration, Number(event.currentTarget.value) || 0)) })} /></label>
+            </>}
           </div>;
         })()}
         <div className={"timeline-scroll " + (trackSidebarCollapsed ? "sidebar-collapsed" : "sidebar-expanded")}
