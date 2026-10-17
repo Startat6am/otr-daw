@@ -549,3 +549,24 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .edit-tools button, .edit-tools select { min-height: 36px; }
   .edit-tools .loop-readout { flex-basis: 100%; }
 }
+
+
+/* Dedicated transport row directly above the arrangement tracks */
+.transport-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 18px 10px;
+  padding: 9px 11px;
+  border: 1px solid #303a34;
+  border-radius: 10px;
+  background: #141916;
+}
+.transport-bar .transport { display: flex; align-items: center; gap: 8px; }
+.transport-caption { color: #84938a; font: 9px 'DM Mono', monospace; letter-spacing: .12em; }
+.transport-bar .time-readout { min-width: 52px; padding-left: 5px; color: var(--mint); font: 14px 'DM Mono', monospace; font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) {
+  .transport-bar { margin: 0 10px 9px; padding: 8px 10px; }
+  .transport-bar .transport { gap: 7px; }
+}
