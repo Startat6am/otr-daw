@@ -518,6 +518,48 @@ export default function App() {
       setStatus("Could not decode this file. Try another WAV, MP3 or OGG file.");
     } finally { setBusy(false); }
   }
+  function addTrack() {
+    if (tracksRef.current.length >= 16) {
+      setStatus("Track limit reached (16 tracks).");
+      return;
+    }
+    const nextNumber = tracksRef.current.reduce((max, track) => {
+      const match = track.name.match(/^(?:Track|Дорожка)\\s+(\\d+)$/i);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0) + 1;
+    const track: Track = { id: uid(), name: "Track " + nextNumber, clips: [], gain: 1, muted: false, solo: false };
+    commitTracks((current) => [...current, track]);
+    setStatus(track.name + " added.");
+  }
+  function renameTrack(trackId: string) {
+    const track = tracksRef.current.find((item) => item.id === trackId);
+    if (!track) return;
+    const answer = window.prompt("Track name", track.name);
+    if (answer === null) return;
+    const name = answer.trim().slice(0, 40);
+    if (!name) {
+      setStatus("Track name cannot be empty.");
+      return;
+    }
+    commitTracks((current) => current.map((item) => item.id === trackId ? { ...item, name } : item));
+    setStatus("Track renamed to " + name + ".");
+  }
+  function removeTrack(trackId: string) {
+    const current = tracksRef.current;
+    if (current.length <= 1) {
+      setStatus("Keep at least one track in the project.");
+      return;
+    }
+    const track = current.find((item) => item.id === trackId);
+    if (!track) return;
+    if (track.clips.length && !window.confirm('Delete "' + track.name + '" and its ' + track.clips.length + ' clip(s)?')) return;
+    commitTracks((items) => items.filter((item) => item.id !== trackId));
+    if (track.clips.some((clip) => clip.id === selectedClip)) setSelectedClip(null);
+    if (clipboardClip?.trackId === trackId) setClipboardClip(null);
+    mixerNodesRef.current.delete(trackId);
+    setStatus(track.name + " removed.");
+  }
+
   function addClip(asset: ImportedAudio, trackId: string) {
     const clip: Clip = { id: uid(), assetId: asset.id, start: 0, sourceStart: 0, sourceEnd: asset.duration };
     commitTracks((current) => current.map((track) => track.id === trackId ? { ...track, clips: [...track.clips, clip] } : track));
@@ -667,7 +709,7 @@ export default function App() {
               <span className="track-number">{String(index + 1).padStart(2, "0")}</span>
               <div className="asset-title"><strong title={asset.name}>{asset.name}</strong><span>{formatTime(asset.duration)} · {asset.sampleRate.toLocaleString()} Hz · {asset.channels} ch</span></div>
             </div>
-            <div className="asset-actions"><button className="add-clip-button" onClick={() => addClip(asset, "track-1")}>+ Track 1</button><button className="add-clip-button" onClick={() => addClip(asset, "track-2")}>+ Track 2</button></div>
+            <div className="asset-actions">{tracks.map((track) => <button className="add-clip-button" key={track.id} onClick={() => addClip(asset, track.id)}>+ {track.name}</button>)}</div>
           </article>
         ))}</div> : <div className="empty-state"><div className="empty-graphic" aria-hidden="true">{Array.from({length: 9}, (_, i) => <span key={i} />)}</div><strong>Your next idea starts here</strong><p>Import a sound, then add it to any track.</p></div>}
       </section>
@@ -686,7 +728,7 @@ export default function App() {
 
       <section className="timeline-panel" aria-label="Multitrack timeline">
         <div className="timeline-heading">
-          <div><p className="eyebrow">ARRANGEMENT</p><h2>Timeline <span className="count">{bpm} BPM</span></h2></div>
+          <div><p className="eyebrow">ARRANGEMENT</p><h2>Timeline <span className="count">{bpm} BPM</span></h2></div><button className="add-track-button" onClick={addTrack} disabled={tracks.length >= 16}>＋ Add track</button>
           <div className="transport">
             <button className="transport-button" onClick={stopTransport} aria-label="Stop playback">■</button>
             <button className="transport-button play-button" onClick={() => void toggleTransport()} aria-label={isPlaying ? "Pause playback" : "Start playback"}>{isPlaying ? "Ⅱ" : "▶"}</button>
@@ -715,7 +757,7 @@ export default function App() {
               {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * 2 * PX_PER_SECOND }}><span>{String(i + 1).padStart(2, "0")}</span></div>)}
             </div>
             {tracks.map((track) => <div className="timeline-track" data-track-id={track.id} key={track.id} style={{ width: timelineWidth }}>
-              <div className="track-label">{track.name}</div>
+              <div className="track-label"><span title={track.name}>{track.name}</span><div className="track-label-actions"><button type="button" title={"Rename " + track.name} aria-label={"Rename " + track.name} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); renameTrack(track.id); }}>✎</button><button type="button" title={"Delete " + track.name} aria-label={"Delete " + track.name} disabled={tracks.length <= 1} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); removeTrack(track.id); }}>×</button></div></div>
               {track.clips.map((clip) => {
                 const asset = assets.find((item) => item.id === clip.assetId);
                 if (!asset) return null;
