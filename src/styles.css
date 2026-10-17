@@ -259,3 +259,69 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .project-icon-actions { gap: 5px; }
   .project-actions .icon-action { flex-basis: 36px; width: 36px; height: 38px; }
 }
+
+/* Mobile-first track management */
+.add-track-button {
+  min-height: 38px;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border: 1px solid #3b6655;
+  border-radius: 9px;
+  background: #203029;
+  color: var(--mint);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.add-track-button:disabled { opacity: .4; cursor: default; }
+.timeline-heading { flex-wrap: wrap; }
+.track-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+  width: 112px;
+  min-height: 26px;
+  padding: 4px 5px 4px 7px;
+  pointer-events: auto;
+}
+.track-label > span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.track-label-actions { display: flex; gap: 2px; flex: 0 0 auto; }
+.track-label-actions button {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #39433d;
+  border-radius: 5px;
+  background: #202522;
+  color: #c6d4cc;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.track-label-actions button:last-child { color: #e4a38e; }
+.track-label-actions button:disabled { opacity: .3; cursor: default; }
+.asset-actions { margin-left: 0; flex-wrap: wrap; }
+.add-clip-button { min-height: 38px; }
+@media (max-width: 520px) {
+  .timeline-heading { align-items: flex-start; }
+  .timeline-heading > div:first-child { flex: 1 1 100%; }
+  .timeline-heading .transport { margin-left: auto; }
+  .add-track-button { width: 100%; min-height: 42px; }
+  .track-label { width: 116px; }
+  .track-label-actions button { width: 28px; height: 30px; }
+  .timeline-track { min-height: 82px; }
+  .timeline-clip { top: 28px; }
+}
+
