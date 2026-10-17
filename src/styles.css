@@ -527,3 +527,8 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 @media (max-width: 520px) {
   .bpm-wheel { width: auto; height: 18px; }
 }
+
+/* Drag blank timeline space to pan without hijacking clips or ruler seeking */
+.timeline-scroll { touch-action: pan-y; }
+.timeline-track { cursor: grab; }
+.timeline-scroll:active .timeline-track { cursor: grabbing; }
