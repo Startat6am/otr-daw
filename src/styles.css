@@ -948,3 +948,37 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .track-knob-wrap small { font-size: 6px; }
   .sidebar-expanded .track-label { padding: 5px 4px; }
 }
+
+
+/* Pin the track sidebar to the viewport while the arrangement scrolls horizontally.
+   The lane still scrolls independently underneath it. Expanded sidebar is +30%. */
+.sidebar-expanded .ruler,
+.sidebar-expanded .timeline-track {
+  margin-left: 135px;
+}
+.sidebar-expanded .track-label {
+  position: sticky;
+  left: 0;
+  top: 0;
+  margin-left: -135px;
+  width: 135px;
+  min-width: 135px;
+  z-index: 6;
+  background: #1b201e;
+  box-shadow: 2px 0 5px #0004;
+}
+.timeline-gutter {
+  z-index: 9;
+}
+@media (max-width: 520px) {
+  .sidebar-expanded .ruler,
+  .sidebar-expanded .timeline-track {
+    margin-left: 107px;
+  }
+  .sidebar-expanded .track-label {
+    margin-left: -107px;
+    width: 107px;
+    min-width: 107px;
+    padding: 5px 4px;
+  }
+}
