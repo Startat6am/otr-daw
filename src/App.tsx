@@ -107,6 +107,7 @@ export default function App() {
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [trackSidebarCollapsed, setTrackSidebarCollapsed] = useState(false);
   const bpmGestureRef = useRef<{ startY: number; startBpm: number; lastStep: number } | null>(null);
+  const timelinePanRef = useRef<{ pointerId: number; startX: number; startScrollLeft: number } | null>(null);
   const [masterGain, setMasterGain] = useState(0.85);
   const [masterLevel, setMasterLevel] = useState(0);
   const masterGainRef = useRef(0.85);
@@ -770,7 +771,20 @@ export default function App() {
             <label>Fade Out (sec)<input aria-label="Clip fade out duration in seconds" type="number" min="0" max={duration} step="0.05" value={Number(Math.min(duration, selected.clip.fadeOut ?? 0).toFixed(2))} onChange={(event) => updateClip(selected.clip.id, { fadeOut: Math.max(0, Math.min(duration, Number(event.currentTarget.value) || 0)) })} /></label>
           </div>;
         })()}
-        <div className={"timeline-scroll " + (trackSidebarCollapsed ? "sidebar-collapsed" : "sidebar-expanded")}>
+        <div className={"timeline-scroll " + (trackSidebarCollapsed ? "sidebar-collapsed" : "sidebar-expanded")}
+          onPointerDown={(event) => {
+            const target = event.target as HTMLElement;
+            if (target.closest(".ruler, .timeline-clip, .track-label, button, input, select, label")) return;
+            timelinePanRef.current = { pointerId: event.pointerId, startX: event.clientX, startScrollLeft: event.currentTarget.scrollLeft };
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            const pan = timelinePanRef.current;
+            if (!pan || pan.pointerId !== event.pointerId) return;
+            event.currentTarget.scrollLeft = pan.startScrollLeft - (event.clientX - pan.startX);
+          }}
+          onPointerUp={(event) => { if (timelinePanRef.current?.pointerId === event.pointerId) timelinePanRef.current = null; }}
+          onPointerCancel={() => { timelinePanRef.current = null; }}>
           <div className="timeline-inner" style={{ width: timelineWidth + (trackSidebarCollapsed ? 24 : (window.innerWidth <= 520 ? 82 : 104)) }}>
             <div className="timeline-gutter"><button className="sidebar-toggle" type="button" aria-label={trackSidebarCollapsed ? "Expand track sidebar" : "Collapse track sidebar"} title={trackSidebarCollapsed ? "Expand track sidebar" : "Collapse track sidebar"} onClick={() => setTrackSidebarCollapsed((value) => !value)}>{trackSidebarCollapsed ? "›" : "‹"}</button></div><div className="ruler" style={{ width: timelineWidth }} onPointerDown={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
