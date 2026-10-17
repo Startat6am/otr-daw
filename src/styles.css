@@ -480,3 +480,50 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .bpm-wheel { width: 48px; }
   .bpm-control input { width: 50px; min-width: 50px; }
 }
+
+
+/* BPM readout sits below the timeline hint; the value itself remains the swipe target */
+.edit-tools > span { flex: 0 0 100%; margin-right: 0; }
+.bpm-control {
+  flex: 0 0 100%;
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 18px;
+  color: #f1f1ed;
+  font: 10px/18px 'DM Mono', monospace;
+}
+.bpm-control > span {
+  color: #f1f1ed;
+  font: inherit;
+  font-weight: 400;
+}
+.bpm-wheel {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 0;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mint);
+  font: inherit;
+  line-height: 18px;
+  cursor: ns-resize;
+}
+.bpm-wheel strong {
+  color: var(--mint);
+  font: inherit;
+  line-height: inherit;
+}
+.bpm-control input { display: none; }
+.timeline-inner { background-image: none; }
+.timeline-track {
+  background-image: repeating-linear-gradient(to right, transparent 0, transparent 28px, #252a28 28.5px, transparent 29px);
+}
+@media (max-width: 520px) {
+  .bpm-wheel { width: auto; height: 18px; }
+}
