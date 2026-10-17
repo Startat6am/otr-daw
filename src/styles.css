@@ -570,3 +570,46 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .transport-bar { margin: 0 10px 9px; padding: 8px 10px; }
   .transport-bar .transport { gap: 7px; }
 }
+
+
+/* Transport is integrated into the BPM row and made 20% shorter */
+.transport-bar { display: none; }
+.bpm-control { flex: 0 0 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.transport-inline { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; padding-left: 10px; border-left: 1px solid #343d37; }
+.transport-inline .transport-button { width: 32px; height: 28px; min-height: 28px; padding: 0; border-radius: 7px; }
+.transport-inline .time-readout { min-width: 48px; color: var(--mint); font: 12px 'DM Mono', monospace; font-variant-numeric: tabular-nums; }
+.transport-inline .play-button { width: 34px; }
+@media (max-width: 520px) {
+  .bpm-control { gap: 6px; }
+  .transport-inline { margin-left: 2px; padding-left: 7px; gap: 5px; }
+  .transport-inline .transport-button { width: 29px; height: 27px; min-height: 27px; }
+  .transport-inline .play-button { width: 31px; }
+  .transport-inline .time-readout { min-width: 43px; font-size: 11px; }
+}
+
+/* Visible loop selection and IN/OUT markers on the timeline ruler */
+.ruler { overflow: visible; }
+.loop-range { z-index: 0; }
+.loop-range-active { z-index: 0; }
+.loop-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 4;
+  width: 2px;
+  background: #b7f5d9;
+  pointer-events: none;
+  box-shadow: 0 0 5px #9be7cf66;
+}
+.loop-marker span {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: #9be7cf;
+  color: #102018;
+  font: 700 8px/12px 'DM Mono', monospace;
+}
+.loop-marker-end { background: #f1d28b; box-shadow: 0 0 5px #f1d28b66; }
+.loop-marker-end span { left: auto; right: 3px; background: #f1d28b; color: #211a0e; }
