@@ -972,7 +972,7 @@ export default function App() {
           }}
           onPointerUp={(event) => { if (timelinePanRef.current?.pointerId === event.pointerId) timelinePanRef.current = null; }}
           onPointerCancel={() => { timelinePanRef.current = null; }}>
-          <div className="timeline-inner" style={{ width: timelineWidth + (trackSidebarCollapsed ? 24 : (window.innerWidth <= 520 ? 82 : 104)) }}>
+          <div className="timeline-inner" style={{ width: timelineWidth + (trackSidebarCollapsed ? 24 : (window.innerWidth <= 520 ? 107 : 135)) }}>
             <div className="timeline-gutter"><button className="sidebar-toggle" type="button" aria-label={trackSidebarCollapsed ? "Expand track sidebar" : "Collapse track sidebar"} title={trackSidebarCollapsed ? "Expand track sidebar" : "Collapse track sidebar"} onClick={() => setTrackSidebarCollapsed((value) => !value)}>{trackSidebarCollapsed ? "›" : "‹"}</button></div><div className="ruler" style={{ width: timelineWidth }} onPointerDown={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
               seekPlayhead((event.clientX - rect.left) / PX_PER_SECOND);
