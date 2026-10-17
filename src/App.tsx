@@ -815,6 +815,7 @@ export default function App() {
           const duration = clipTimelineDuration(selected.clip);
           return <div className="clip-inspector" aria-label="Selected clip settings">
             <strong>Selected clip</strong>
+            <button className="clip-inspector-close" type="button" aria-label="Close clip settings" onClick={() => setSelectedClip(null)}>×</button>
             <label>Start (sec)<input aria-label="Clip start time in seconds" type="number" min="0" step={snapEnabled ? BEAT * 4 / gridDivision : 0.01} value={Number(selected.clip.start.toFixed(3))} onChange={(event) => setSelectedClipTiming(Number(event.currentTarget.value), duration)} /></label>
             <label>Length (sec)<input aria-label="Clip duration in seconds" type="number" min="0.05" max={selected.clip.sourceEnd - selected.clip.sourceStart + (assets.find((asset) => asset.id === selected.clip.assetId)?.duration ?? 0)} step={snapEnabled ? BEAT * 4 / gridDivision : 0.01} value={Number(duration.toFixed(3))} onChange={(event) => setSelectedClipTiming(selected.clip.start, Number(event.currentTarget.value))} /></label>
             <label>Fade In (sec)<input aria-label="Clip fade in duration in seconds" type="number" min="0" max={duration} step="0.05" value={Number(Math.min(duration, selected.clip.fadeIn ?? 0).toFixed(2))} onChange={(event) => updateClip(selected.clip.id, { fadeIn: Math.max(0, Math.min(duration, Number(event.currentTarget.value) || 0)) })} /></label>
