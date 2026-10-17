@@ -639,3 +639,45 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .playback-bpm-panel { margin: 0 10px 9px; padding: 6px 9px; }
   .playback-bpm-panel .bpm-control { gap: 7px; }
 }
+
+
+/* Keep transport compact and visually integrated with the editing toolbar */
+.playback-bpm-panel {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin: -5px 18px 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.playback-bpm-panel .bpm-control {
+  gap: 6px;
+  min-height: 28px;
+}
+.playback-bpm-panel .transport-inline {
+  margin-left: 3px;
+  padding-left: 7px;
+}
+.playback-bpm-panel .transport-inline .transport-button {
+  width: 29px;
+  height: 27px;
+  min-height: 27px;
+  border-radius: 6px;
+}
+.playback-bpm-panel .transport-inline .play-button {
+  width: 31px;
+}
+.playback-bpm-panel .transport-inline .time-readout {
+  min-width: 43px;
+  font-size: 11px;
+}
+@media (max-width: 520px) {
+  .playback-bpm-panel {
+    margin: -5px 10px 8px;
+    padding: 0;
+  }
+  .playback-bpm-panel .bpm-control { gap: 5px; }
+  .playback-bpm-panel .transport-inline { margin-left: 2px; padding-left: 6px; gap: 4px; }
+}
