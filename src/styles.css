@@ -681,3 +681,66 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .playback-bpm-panel .bpm-control { gap: 5px; }
   .playback-bpm-panel .transport-inline { margin-left: 2px; padding-left: 6px; gap: 4px; }
 }
+
+
+/* Compact transport: icon-only loop toggle and swipeable grid division wheel */
+.playback-bpm-panel .transport-inline {
+  gap: 5px;
+  flex-wrap: nowrap;
+}
+.playback-bpm-panel .transport-inline .loop-toggle {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 29px;
+  width: 29px;
+  height: 27px;
+  min-height: 27px;
+  padding: 0;
+  border: 1px solid #343d37;
+  border-radius: 6px;
+  background: transparent;
+  color: #aab8b0;
+}
+.playback-bpm-panel .transport-inline .loop-toggle[aria-pressed="true"] {
+  border-color: var(--mint);
+  background: #203029;
+  color: var(--mint);
+}
+.playback-bpm-panel .transport-inline .loop-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.grid-wheel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 36px;
+  height: 27px;
+  margin-left: 2px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mint);
+  font: 11px/18px 'DM Mono', monospace;
+  cursor: ns-resize;
+  user-select: none;
+  touch-action: none;
+}
+.grid-wheel strong { font: inherit; color: inherit; }
+@media (max-width: 520px) {
+  .playback-bpm-panel .transport-inline { gap: 4px; }
+  .playback-bpm-panel .transport-inline .loop-toggle {
+    flex-basis: 27px;
+    width: 27px;
+    height: 27px;
+    min-height: 27px;
+  }
+  .grid-wheel { min-width: 34px; margin-left: 1px; font-size: 10px; }
+}
