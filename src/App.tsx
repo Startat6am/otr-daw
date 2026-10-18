@@ -244,7 +244,6 @@ export default function App() {
         const saved = await loadSavedProject();
         if (cancelled) return;
         if (saved) {
-          const context = getContext();
           const restoredAssets: ImportedAudio[] = [];
           for (const item of saved.assets) {
             try {
@@ -357,7 +356,6 @@ export default function App() {
       if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.assets) || !Array.isArray(parsed.tracks) || !parsed.settings) {
         throw new Error("Invalid project file");
       }
-      const context = getContext();
       const restoredAssets: ImportedAudio[] = [];
       for (const item of parsed.assets) {
         if (typeof item.audioData !== "string") throw new Error("Project audio data is missing");
@@ -621,8 +619,6 @@ export default function App() {
     setBusy(true);
     setStatus("Reading audio metadata…");
     try {
-      const context = getContext();
-      if (context.state === "suspended") await context.resume();
       const imported: ImportedAudio[] = [];
       let failedFiles = 0;
       for (const file of Array.from(files)) {
