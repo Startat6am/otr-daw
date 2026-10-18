@@ -446,6 +446,10 @@ export default function App() {
           const compressedBytes = await asset.audioData.arrayBuffer();
           decoded = await context.decodeAudioData(compressedBytes);
           decodedAssetsRef.current.set(asset.id, decoded);
+          if (!asset.waveformPeaks) {
+            const waveformPeaks = peaksFromBuffer(decoded);
+            setAssets((current) => current.map((item) => item.id === asset.id ? { ...item, waveformPeaks } : item));
+          }
         }
         const startFrame = Math.max(0, Math.floor(clip.sourceStart * decoded.sampleRate));
         const endFrame = Math.min(decoded.length, Math.max(startFrame + 1, Math.floor(clip.sourceEnd * decoded.sampleRate)));
@@ -652,38 +656,22 @@ export default function App() {
     commitTracks((current) => current.map((track) => track.id === trackId ? { ...track, clips: [...track.clips, clip] } : track));
     setSelectedClip(clip.id);
     setStatus(`Added ${asset.name} to ${tracks.find((track) => track.id === trackId)?.name}.`);
-    if (!asset.waveformPeaks) void generateWaveformPeaks(asset);
   }
 
-  async function generateWaveformPeaks(asset: ImportedAudio) {
-    if (assets.find((item) => item.id === asset.id)?.waveformPeaks) return;
-    let temporaryContext: AudioContext | null = null;
-    try {
-      setStatus(`Building waveform for ${asset.name}…`);
-      temporaryContext = new AudioContext();
-      const bytes = await asset.audioData.arrayBuffer();
-      const decoded = await temporaryContext.decodeAudioData(bytes);
-      const channelCount = decoded.numberOfChannels;
-      const bucketCount = 1200;
-      const peaks = new Array<number>(bucketCount).fill(0);
-      for (let bucket = 0; bucket < bucketCount; bucket++) {
-        const start = Math.floor(bucket * decoded.length / bucketCount);
-        const end = Math.max(start + 1, Math.floor((bucket + 1) * decoded.length / bucketCount));
-        let peak = 0;
-        for (let channel = 0; channel < channelCount; channel++) {
-          const samples = decoded.getChannelData(channel);
-          for (let i = start; i < Math.min(end, samples.length); i++) peak = Math.max(peak, Math.abs(samples[i]));
-        }
-        peaks[bucket] = peak;
+  function peaksFromBuffer(decoded: AudioBuffer) {
+    const bucketCount = 1200;
+    const peaks = new Array<number>(bucketCount).fill(0);
+    for (let bucket = 0; bucket < bucketCount; bucket++) {
+      const start = Math.floor(bucket * decoded.length / bucketCount);
+      const end = Math.max(start + 1, Math.floor((bucket + 1) * decoded.length / bucketCount));
+      let peak = 0;
+      for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
+        const samples = decoded.getChannelData(channel);
+        for (let i = start; i < Math.min(end, samples.length); i++) peak = Math.max(peak, Math.abs(samples[i]));
       }
-      setAssets((current) => current.map((item) => item.id === asset.id ? { ...item, waveformPeaks: peaks } : item));
-      setStatus(`Waveform ready: ${asset.name}.`);
-    } catch (error) {
-      console.warn("Could not build waveform without retaining decoded audio", error);
-      setStatus(`Added ${asset.name}; waveform preview is unavailable for this file.`);
-    } finally {
-      if (temporaryContext && temporaryContext.state !== "closed") void temporaryContext.close();
+      peaks[bucket] = peak;
     }
+    return peaks;
   }
   function updateClip(clipId: string, change: Partial<Clip>, recordHistory = true) {
     const updater = (current: Track[]) => current.map((track) => ({ ...track, clips: track.clips.map((clip) => clip.id === clipId ? { ...clip, ...change } : clip) }));
