@@ -81,6 +81,14 @@ export async function saveProject(project: SavedProject): Promise<void> {
       const transaction = database.transaction([STORE_NAME, ASSET_STORE], "readwrite");
       const projectStore = transaction.objectStore(STORE_NAME);
       const assetStore = transaction.objectStore(ASSET_STORE);
+      // Keep IndexedDB tidy when a user removes audio from the library.
+      const retainedAssetIds = new Set(project.assets.map((asset) => asset.id));
+      const storedKeysRequest = assetStore.getAllKeys();
+      storedKeysRequest.onsuccess = () => {
+        for (const key of storedKeysRequest.result) {
+          if (!retainedAssetIds.has(String(key))) assetStore.delete(key);
+        }
+      };
       const metadata: ProjectMetadata = {
         ...project,
         assets: project.assets.map(({ audioData: _audioData, ...asset }) => asset),
