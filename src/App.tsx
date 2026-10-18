@@ -11,10 +11,11 @@ type ImportedAudio = {
   buffer?: AudioBuffer;
   audioData: Blob;
   waveformPeaks?: number[];
+  waveformPeaksDetailed?: number[];
   bpm?: number;
 };
 type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number; tempoBpm?: number; fadeIn?: number; fadeOut?: number };
-type Track = { id: string; name: string; clips: Clip[]; gain: number; pan?: number; muted: boolean; solo: boolean };
+type Track = { id: string; name: string; clips: Clip[]; gain: number; pan?: number; muted: boolean; solo: boolean; waveformDetail?: boolean };
 const DEFAULT_BPM = 120;
 const MIN_BPM = 40;
 const MAX_BPM = 240;
@@ -287,7 +288,7 @@ export default function App() {
       const project: SavedProject = {
         schemaVersion: 1,
         updatedAt: new Date().toISOString(),
-        assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: asset.audioData, waveformPeaks: asset.waveformPeaks, bpm: asset.bpm })),
+        assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: asset.audioData, waveformPeaks: asset.waveformPeaks, waveformPeaksDetailed: asset.waveformPeaksDetailed, bpm: asset.bpm })),
         tracks,
         settings: { snapEnabled, timelineZoom, masterGain, bpm },
       };
@@ -334,7 +335,7 @@ export default function App() {
         schemaVersion: 1,
         updatedAt: new Date().toISOString(),
         projectName: projectName.trim() || "Untitled project",
-        assets: await Promise.all(assets.map(async (asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: bufferToBase64(await asset.audioData.arrayBuffer()), waveformPeaks: asset.waveformPeaks, bpm: asset.bpm }))),
+        assets: await Promise.all(assets.map(async (asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: bufferToBase64(await asset.audioData.arrayBuffer()), waveformPeaks: asset.waveformPeaks, waveformPeaksDetailed: asset.waveformPeaksDetailed, bpm: asset.bpm }))),
         tracks,
         settings: { snapEnabled, timelineZoom, masterGain, bpm },
       };
@@ -727,9 +728,44 @@ export default function App() {
       const match = track.name.match(/^(?:Track|Дорожка)\\s+(\\d+)$/i);
       return match ? Math.max(max, Number(match[1])) : max;
     }, 0) + 1;
-    const track: Track = { id: uid(), name: "Track " + nextNumber, clips: [], gain: 1, muted: false, solo: false };
+    const track: Track = { id: uid(), name: "Track " + nextNumber, clips: [], gain: 1, muted: false, solo: false, waveformDetail: false };
     commitTracks((current) => [...current, track]);
     setStatus(track.name + " added.");
+  }
+
+  async function toggleTrackWaveformDetail(trackId: string) {
+    const track = tracksRef.current.find((item) => item.id === trackId);
+    if (!track) return;
+    if (track.waveformDetail) {
+      commitTracks((current) => current.map((item) => item.id === trackId ? { ...item, waveformDetail: false } : item));
+      setStatus(`Detailed waveform disabled for ${track.name}.`);
+      return;
+    }
+    const assetIds = [...new Set(track.clips.map((clip) => clip.assetId))];
+    const missing = assetIds.filter((id) => {
+      const asset = assets.find((item) => item.id === id);
+      return Boolean(asset && !asset.waveformPeaksDetailed?.length);
+    });
+    if (missing.length) {
+      setStatus(`Building detailed waveform for ${track.name}…`);
+      try {
+        const context = contextRef.current ?? new AudioContext();
+        contextRef.current = context;
+        for (const assetId of missing) {
+          const asset = assets.find((item) => item.id === assetId);
+          if (!asset) continue;
+          const decoded = await getDecodedAsset(asset, context);
+          const waveformPeaksDetailed = peaksFromBuffer(decoded, 6000);
+          setAssets((current) => current.map((item) => item.id === assetId ? { ...item, waveformPeaksDetailed } : item));
+        }
+        setStatus(`Detailed waveform ready for ${track.name}.`);
+      } catch (error) {
+        console.error("Could not build detailed waveform", error);
+        setStatus("Could not build detailed waveform. Try again after playing a short section of audio.");
+        return;
+      }
+    }
+    commitTracks((current) => current.map((item) => item.id === trackId ? { ...item, waveformDetail: true } : item));
   }
   function renameTrack(trackId: string) {
     const track = tracksRef.current.find((item) => item.id === trackId);
@@ -779,8 +815,7 @@ export default function App() {
     setStatus(`Added ${asset.name} to ${tracks.find((track) => track.id === trackId)?.name}.`);
   }
 
-  function peaksFromBuffer(decoded: AudioBuffer) {
-    const bucketCount = 1200;
+  function peaksFromBuffer(decoded: AudioBuffer, bucketCount = 1200) {
     const peaks = new Array<number>(bucketCount).fill(0);
     for (let bucket = 0; bucket < bucketCount; bucket++) {
       const start = Math.floor(bucket * decoded.length / bucketCount);
@@ -1108,7 +1143,7 @@ export default function App() {
               {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * BEAT * 4 * PX_PER_SECOND }}><span>{String(i + 1).padStart(2, "0")}</span></div>)}
             </div>
             {tracks.map((track) => <div className="timeline-track" data-track-id={track.id} key={track.id} style={{ width: timelineWidth, backgroundImage: `repeating-linear-gradient(to right, #252a28 0, #252a28 1px, transparent 1px, transparent ${Math.max(1, BEAT * 4 / gridDivision * PX_PER_SECOND)}px)` }}>
-              <div className="track-label"><span title={track.name}>{trackSidebarCollapsed ? String(tracks.findIndex((item) => item.id === track.id) + 1).padStart(2, "0") : track.name}</span>{!trackSidebarCollapsed && <div className="track-mini-controls"><div className="track-knob-wrap"><div className="track-knob pan-knob" role="slider" tabIndex={0} aria-label={track.name + " pan"} aria-valuemin={-100} aria-valuemax={100} aria-valuenow={Math.round((track.pan ?? 0) * 100)} title={`PAN ${Math.round((track.pan ?? 0) * 100)}`} style={{ "--knob-angle": `${(track.pan ?? 0) * 135}deg` } as React.CSSProperties} onPointerDown={(event) => startTrackKnob(event, track.id, "pan", track.pan ?? 0)} onPointerMove={moveTrackKnob} onPointerUp={endTrackKnob} onPointerCancel={endTrackKnob} onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowDown") { event.preventDefault(); changeTrack(track.id, { pan: Math.max(-1, (track.pan ?? 0) - .05) }); } else if (event.key === "ArrowRight" || event.key === "ArrowUp") { event.preventDefault(); changeTrack(track.id, { pan: Math.min(1, (track.pan ?? 0) + .05) }); } }}><span /></div><small>PAN</small></div><div className="track-knob-wrap"><div className="track-knob volume-knob" role="slider" tabIndex={0} aria-label={track.name + " volume"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(track.gain * 100)} title={`VOL ${Math.round(track.gain * 100)}%`} style={{ "--knob-angle": `${-135 + track.gain * 270}deg` } as React.CSSProperties} onPointerDown={(event) => startTrackKnob(event, track.id, "gain", track.gain)} onPointerMove={moveTrackKnob} onPointerUp={endTrackKnob} onPointerCancel={endTrackKnob} onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); changeTrack(track.id, { gain: Math.max(0, track.gain - .05) }); } else if (event.key === "ArrowUp" || event.key === "ArrowRight") { event.preventDefault(); changeTrack(track.id, { gain: Math.min(1, track.gain + .05) }); } }}><span /></div><small>VOL</small></div></div>}<div className="track-label-actions"><button type="button" title={"Rename " + track.name} aria-label={"Rename " + track.name} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); renameTrack(track.id); }}>✎</button><button type="button" title={"Delete " + track.name} aria-label={"Delete " + track.name} disabled={tracks.length <= 1} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); removeTrack(track.id); }}>×</button></div></div>
+              <div className="track-label"><span title={track.name}>{trackSidebarCollapsed ? String(tracks.findIndex((item) => item.id === track.id) + 1).padStart(2, "0") : track.name}</span>{!trackSidebarCollapsed && <><div className="track-mini-controls"><div className="track-knob-wrap"><div className="track-knob pan-knob" role="slider" tabIndex={0} aria-label={track.name + " pan"} aria-valuemin={-100} aria-valuemax={100} aria-valuenow={Math.round((track.pan ?? 0) * 100)} title={`PAN ${Math.round((track.pan ?? 0) * 100)}`} style={{ "--knob-angle": `${(track.pan ?? 0) * 135}deg` } as React.CSSProperties} onPointerDown={(event) => startTrackKnob(event, track.id, "pan", track.pan ?? 0)} onPointerMove={moveTrackKnob} onPointerUp={endTrackKnob} onPointerCancel={endTrackKnob} onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowDown") { event.preventDefault(); changeTrack(track.id, { pan: Math.max(-1, (track.pan ?? 0) - .05) }); } else if (event.key === "ArrowRight" || event.key === "ArrowUp") { event.preventDefault(); changeTrack(track.id, { pan: Math.min(1, (track.pan ?? 0) + .05) }); } }}><span /></div><small>PAN</small></div><div className="track-knob-wrap"><div className="track-knob volume-knob" role="slider" tabIndex={0} aria-label={track.name + " volume"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(track.gain * 100)} title={`VOL ${Math.round(track.gain * 100)}%`} style={{ "--knob-angle": `${-135 + track.gain * 270}deg` } as React.CSSProperties} onPointerDown={(event) => startTrackKnob(event, track.id, "gain", track.gain)} onPointerMove={moveTrackKnob} onPointerUp={endTrackKnob} onPointerCancel={endTrackKnob} onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); changeTrack(track.id, { gain: Math.max(0, track.gain - .05) }); } else if (event.key === "ArrowUp" || event.key === "ArrowRight") { event.preventDefault(); changeTrack(track.id, { gain: Math.min(1, track.gain + .05) }); } }}><span /></div><small>VOL</small></div></div><button className={`waveform-detail-toggle${track.waveformDetail ? " is-active" : ""}`} type="button" aria-pressed={Boolean(track.waveformDetail)} title={track.waveformDetail ? "Use standard waveform detail" : "Improve waveform detail"} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void toggleTrackWaveformDetail(track.id); }}>{track.waveformDetail ? "WAVE HD ON" : "WAVE HD"}</button></>}<div className="track-label-actions"><button type="button" title={"Rename " + track.name} aria-label={"Rename " + track.name} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); renameTrack(track.id); }}>✎</button><button type="button" title={"Delete " + track.name} aria-label={"Delete " + track.name} disabled={tracks.length <= 1} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); removeTrack(track.id); }}>×</button></div></div>
               {track.clips.map((clip) => {
                 const asset = assets.find((item) => item.id === clip.assetId);
                 if (!asset) return null;
@@ -1195,7 +1230,7 @@ export default function App() {
                     <span className="fade-handle fade-out-handle" data-fade="fadeOut" style={{ right: `${Math.min(100, Math.max(0, (clip.fadeOut ?? 0) / duration * 100))}%` }} title="Drag to adjust Fade Out" aria-label="Adjust fade out" />
                   </>}
                   <span className={"trim-handle trim-left " + (trimMode ? "trim-enabled" : "trim-disabled")} data-edge="left" aria-label={trimMode ? "Trim clip start" : "Move clip from start edge"} />
-                  <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer ?? decodedAssetsRef.current.get(asset.id)} peaks={asset.waveformPeaks} duration={asset.duration} sourceStart={clip.sourceStart} sourceEnd={clip.sourceEnd} /></div>
+                  <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer ?? decodedAssetsRef.current.get(asset.id)} peaks={track.waveformDetail ? (asset.waveformPeaksDetailed ?? asset.waveformPeaks) : asset.waveformPeaks} duration={asset.duration} sourceStart={clip.sourceStart} sourceEnd={clip.sourceEnd} /></div>
                   <span className={"trim-handle trim-right " + (trimMode ? "trim-enabled" : "trim-disabled")} data-edge="right" aria-label={trimMode ? "Trim clip end" : "Move clip from end edge"} />
                   {selectedClip === clip.id && <div className="clip-nudges"><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, -1); }}>− grid</button><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, 1); }}>+ grid</button></div>}
                 </div>;
