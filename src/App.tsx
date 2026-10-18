@@ -125,6 +125,8 @@ export default function App() {
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [status, setStatus] = useState("Import audio, add it to a track, then press play.");
   const [busy, setBusy] = useState(false);
+  const [libraryCollapsed, setLibraryCollapsed] = useState(false);
+  const [mixerCollapsed, setMixerCollapsed] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
@@ -651,6 +653,16 @@ export default function App() {
     setStatus(track.name + " removed.");
   }
 
+  function removeAsset(asset: ImportedAudio) {
+    const uses = tracksRef.current.reduce((count, track) => count + track.clips.filter((clip) => clip.assetId === asset.id).length, 0);
+    if (uses > 0 && !window.confirm(`Remove "${asset.name}" from the library and delete its ${uses} timeline clip(s)?`)) return;
+    setAssets((current) => current.filter((item) => item.id !== asset.id));
+    if (uses > 0) commitTracks((current) => current.map((track) => ({ ...track, clips: track.clips.filter((clip) => clip.assetId !== asset.id) })));
+    decodedAssetsRef.current.delete(asset.id);
+    for (const key of stretchedBuffersRef.current.keys()) if (key.includes(`:${asset.id}`)) stretchedBuffersRef.current.delete(key);
+    setStatus(`"${asset.name}" removed from the library.`);
+  }
+
   function addClip(asset: ImportedAudio, trackId: string) {
     const clip: Clip = { id: uid(), assetId: asset.id, start: 0, sourceStart: 0, sourceEnd: asset.duration, tempoBpm: asset.bpm ?? bpm };
     commitTracks((current) => current.map((track) => track.id === trackId ? { ...track, clips: [...track.clips, clip] } : track));
@@ -870,8 +882,9 @@ export default function App() {
       <section className="workspace" aria-label="Audio workspace">
         <div className="section-heading">
           <div><p className="eyebrow">YOUR SESSION</p><h2>Audio library <span className="count">{assets.length}</span></h2></div>
-          <button className="stop-button" onClick={stopTransport}>Stop</button>
+          <button className="collapse-button" aria-expanded={!libraryCollapsed} onClick={() => setLibraryCollapsed((value) => !value)}>{libraryCollapsed ? "＋ Expand" : "− Collapse"}</button>
         </div>
+        {!libraryCollapsed && <>
         <label className={`import-card ${busy ? "is-busy" : ""}`}>
           <input type="file" accept="audio/wav,audio/mpeg,audio/ogg,.wav,.mp3,.ogg,.oga" multiple onChange={(event) => { void importFiles(event.currentTarget.files); event.currentTarget.value = ""; }} disabled={busy} />
           <span className="import-icon">{busy ? "…" : "+"}</span>
@@ -885,14 +898,15 @@ export default function App() {
               <span className="track-number">{String(index + 1).padStart(2, "0")}</span>
               <div className="asset-title"><strong title={asset.name}>{asset.name}</strong><span>{formatTime(asset.duration)} · {asset.sampleRate.toLocaleString()} Hz · {asset.channels} ch · {asset.bpm ? `BPM ~${asset.bpm}` : "BPM —"}</span></div>
             </div>
-            <div className="asset-actions">{tracks.map((track) => <button className="add-clip-button" key={track.id} onClick={() => addClip(asset, track.id)}>+ {track.name}</button>)}</div>
+            <div className="asset-actions">{tracks.map((track) => <button className="add-clip-button" key={track.id} onClick={() => addClip(asset, track.id)}>+ {track.name}</button>)}<button className="remove-asset-button" onClick={() => removeAsset(asset)} aria-label={`Remove ${asset.name} from library`}>Remove</button></div>
           </article>
         ))}</div> : <div className="empty-state"><div className="empty-graphic" aria-hidden="true">{Array.from({length: 9}, (_, i) => <span key={i} />)}</div><strong>Your next idea starts here</strong><p>Import a sound, then add it to any track.</p></div>}
+        </>}
       </section>
 
       <section className="mixer-panel" aria-label="Audio mixer">
-        <div className="section-heading mixer-heading"><div><p className="eyebrow">LEVELS & CONTROL</p><h2>Mixer <span className="count">{tracks.length} tracks</span></h2></div><div className="master-meter" aria-label={`Master signal ${Math.round(masterLevel * 100)} percent`}><span style={{ width: `${Math.round(masterLevel * 100)}%` }} /></div></div>
-        <div className="mixer-channels">
+        <div className="section-heading mixer-heading"><div><p className="eyebrow">LEVELS & CONTROL</p><h2>Mixer <span className="count">{tracks.length} tracks</span></h2></div><div className="mixer-heading-actions"><div className="master-meter" aria-label={`Master signal ${Math.round(masterLevel * 100)} percent`}><span style={{ width: `${Math.round(masterLevel * 100)}%` }} /></div><button className="collapse-button" aria-expanded={!mixerCollapsed} onClick={() => setMixerCollapsed((value) => !value)}>{mixerCollapsed ? "＋ Expand" : "− Collapse"}</button></div></div>
+        {!mixerCollapsed && <div className="mixer-channels">
           {tracks.map((track, index) => <article className={`mixer-channel ${track.muted ? "channel-muted" : ""} ${track.solo ? "channel-solo" : ""}`} key={track.id}>
             <div className="channel-top"><span className="channel-index">{String(index + 1).padStart(2, "0")}</span><strong>{track.name}</strong><span className="channel-db">{track.gain === 0 ? "−∞" : `${(20 * Math.log10(track.gain)).toFixed(1)} dB`}</span></div>
             <label className="volume-control"><span>VOL</span><input aria-label={`${track.name} volume`} type="range" min="0" max="1" step="0.01" value={track.gain} onChange={(event) => changeTrack(track.id, { gain: Number(event.currentTarget.value) })} /><output>{Math.round(track.gain * 100)}%</output></label>
