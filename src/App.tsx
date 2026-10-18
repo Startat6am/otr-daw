@@ -9,7 +9,7 @@ type ImportedAudio = {
   sampleRate: number;
   channels: number;
   buffer: AudioBuffer;
-  audioData: ArrayBuffer;
+  audioData: Blob;
   bpm?: number;
 };
 type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number; tempoBpm?: number; fadeIn?: number; fadeOut?: number };
@@ -235,9 +235,10 @@ export default function App() {
           const restoredAssets: ImportedAudio[] = [];
           for (const item of saved.assets) {
             try {
-              const audioData = item.audioData.slice(0);
-              const buffer = await context.decodeAudioData(audioData.slice(0));
-              restoredAssets.push({ ...item, audioData, buffer, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, bpm: typeof item.bpm === "number" ? item.bpm : detectBpm(buffer) });
+              const audioBlob = item.audioData instanceof Blob ? item.audioData : new Blob([item.audioData], { type: "application/octet-stream" });
+              const decodeBytes = await audioBlob.arrayBuffer();
+              const buffer = await context.decodeAudioData(decodeBytes);
+              restoredAssets.push({ ...item, audioData: audioBlob, buffer, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, bpm: typeof item.bpm === "number" ? item.bpm : detectBpm(buffer) });
             } catch {
               // Keep the rest of the project available if one stored audio file is no longer decodable.
             }
@@ -319,7 +320,7 @@ export default function App() {
         schemaVersion: 1,
         updatedAt: new Date().toISOString(),
         projectName: projectName.trim() || "Untitled project",
-        assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: bufferToBase64(asset.audioData), bpm: asset.bpm })),
+        assets: await Promise.all(assets.map(async (asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: bufferToBase64(await asset.audioData.arrayBuffer()), bpm: asset.bpm }))),
         tracks,
         settings: { snapEnabled, timelineZoom, masterGain, bpm },
       };
@@ -348,9 +349,10 @@ export default function App() {
       const restoredAssets: ImportedAudio[] = [];
       for (const item of parsed.assets) {
         if (typeof item.audioData !== "string") throw new Error("Project audio data is missing");
-        const audioData = base64ToBuffer(item.audioData);
-        const buffer = await context.decodeAudioData(audioData.slice(0));
-        restoredAssets.push({ ...item, audioData, buffer, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels });
+        const decodedBytes = base64ToBuffer(item.audioData);
+        const audioBlob = new Blob([decodedBytes], { type: "application/octet-stream" });
+        const buffer = await context.decodeAudioData(decodedBytes.slice(0));
+        restoredAssets.push({ ...item, audioData: audioBlob, buffer, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels });
       }
       const restoredTracks: Track[] = parsed.tracks.map((track: Track) => ({
         ...track,
@@ -609,10 +611,11 @@ export default function App() {
       for (const file of Array.from(files)) {
         if (!/\.(wav|mp3|ogg|oga)$/i.test(file.name) && !file.type.startsWith("audio/")) continue;
         try {
-          const audioData = await file.arrayBuffer();
-          const buffer = await context.decodeAudioData(audioData.slice(0));
+          const decodeBytes = await file.arrayBuffer();
+          const buffer = await context.decodeAudioData(decodeBytes);
           const detectedBpm = detectBpm(buffer);
-          imported.push({ id: uid(), name: file.name, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, buffer, audioData, bpm: detectedBpm });
+          // Keep the original as a Blob; retaining a second compressed ArrayBuffer wastes memory.
+          imported.push({ id: uid(), name: file.name, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, buffer, audioData: file.slice(0, file.size, file.type || "application/octet-stream"), bpm: detectedBpm });
         } catch (error) {
           console.error("Audio file import failed", file.name, error);
           failedFiles++;
