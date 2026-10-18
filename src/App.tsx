@@ -679,11 +679,18 @@ export default function App() {
 
   async function importFiles(files: FileList | null) {
     if (!files?.length) return;
+    // Import should remain lightweight even after several preview/playback passes.
+    // Active AudioBufferSourceNodes keep their own references, so clearing these caches is safe.
+    if (!playingRef.current) {
+      decodedAssetsRef.current.clear();
+      stretchedBuffersRef.current.clear();
+    }
     setBusy(true);
     setStatus("Reading audio metadata…");
     try {
       const imported: ImportedAudio[] = [];
       let failedFiles = 0;
+      let lastImportError = "";
       for (const file of Array.from(files)) {
         if (!/\.(wav|mp3|ogg|oga)$/i.test(file.name) && !file.type.startsWith("audio/")) continue;
         try {
@@ -692,16 +699,23 @@ export default function App() {
           imported.push({ id: uid(), name: file.name, duration, sampleRate: 44100, channels: 2, buffer: undefined, audioData: audioBlob });
         } catch (error) {
           console.error("Audio file import failed", file.name, error);
+          lastImportError = error instanceof Error ? error.message : String(error);
           failedFiles++;
         }
       }
       if (imported.length) setAssets((current) => [...current, ...imported]);
-      if (imported.length && failedFiles) setStatus(`Imported ${imported.length} file(s); ${failedFiles} file(s) could not be decoded.`);
+      if (imported.length && failedFiles) setStatus(`Imported ${imported.length} file(s); ${failedFiles} file(s) failed. Last error: ${lastImportError || "unknown browser error"}`);
       else if (imported.length) setStatus(`Imported ${imported.length} file${imported.length === 1 ? "" : "s"}. Add clips to tracks below.`);
-      else setStatus(failedFiles ? "Could not decode audio. Try a shorter or smaller MP3/OGG file, or close other tabs and reload the app." : "No supported audio files found. Choose WAV, MP3 or OGG.");
+      else if (failedFiles) {
+        const memoryFailure = /memory|allocat|resource/i.test(lastImportError);
+        setStatus(memoryFailure
+          ? `Browser resource error while reading audio: ${lastImportError}. Audio caches were cleared; reload the app if it persists.`
+          : `Could not read audio metadata: ${lastImportError || "unknown browser error"}. Try a WAV, MP3 or OGG file.`);
+      } else setStatus("No supported audio files found. Choose WAV, MP3 or OGG.");
     } catch (error) {
-      console.error(error);
-      setStatus("Could not decode this file. Try another WAV, MP3 or OGG file.");
+      console.error("Audio import failed", error);
+      const reason = error instanceof Error ? error.message : String(error);
+      setStatus(`Audio import failed: ${reason}`);
     } finally { setBusy(false); }
   }
   function addTrack() {
