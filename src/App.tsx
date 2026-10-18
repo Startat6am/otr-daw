@@ -10,6 +10,7 @@ type ImportedAudio = {
   channels: number;
   buffer?: AudioBuffer;
   audioData: Blob;
+  waveformPeaks?: number[];
   bpm?: number;
 };
 type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number; tempoBpm?: number; fadeIn?: number; fadeOut?: number };
@@ -60,11 +61,11 @@ function base64ToBuffer(value: string) {
   return bytes.buffer;
 }
 
-function Waveform({ buffer, sourceStart = 0, sourceEnd }: { buffer?: AudioBuffer; sourceStart?: number; sourceEnd?: number }) {
+function Waveform({ buffer, peaks, sourceStart = 0, sourceEnd }: { buffer?: AudioBuffer; peaks?: number[]; sourceStart?: number; sourceEnd?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !buffer) return;
+    if (!canvas || (!buffer && !peaks?.length)) return;
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     canvas.width = Math.max(1, Math.floor(rect.width * dpr));
@@ -77,31 +78,42 @@ function Waveform({ buffer, sourceStart = 0, sourceEnd }: { buffer?: AudioBuffer
     ctx.lineWidth = 1.4;
     ctx.lineCap = "round";
     ctx.beginPath();
-    const channel = buffer.getChannelData(0);
-    const rangeStart = Math.max(0, Math.min(channel.length - 1, Math.floor(sourceStart * buffer.sampleRate)));
-    const rangeEnd = Math.max(rangeStart + 1, Math.min(channel.length, Math.floor((sourceEnd ?? buffer.duration) * buffer.sampleRate)));
-    const rangeLength = rangeEnd - rangeStart;
-    const samplesPerPixel = Math.max(1, rangeLength / Math.max(1, rect.width));
     const middle = rect.height / 2;
-    for (let x = 0; x < rect.width; x++) {
-      const start = Math.min(rangeEnd, rangeStart + Math.floor(x * samplesPerPixel));
-      const end = Math.min(rangeEnd, Math.max(start + 1, rangeStart + Math.floor((x + 1) * samplesPerPixel)));
-      let min = 1, max = -1;
-      for (let i = start; i < end; i++) {
-        const v = channel[i];
-        if (v < min) min = v;
-        if (v > max) max = v;
+    if (buffer) {
+      const channel = buffer.getChannelData(0);
+      const rangeStart = Math.max(0, Math.min(channel.length - 1, Math.floor(sourceStart * buffer.sampleRate)));
+      const rangeEnd = Math.max(rangeStart + 1, Math.min(channel.length, Math.floor((sourceEnd ?? buffer.duration) * buffer.sampleRate)));
+      const rangeLength = rangeEnd - rangeStart;
+      const samplesPerPixel = Math.max(1, rangeLength / Math.max(1, rect.width));
+      for (let x = 0; x < rect.width; x++) {
+        const start = Math.min(rangeEnd, rangeStart + Math.floor(x * samplesPerPixel));
+        const end = Math.min(rangeEnd, Math.max(start + 1, rangeStart + Math.floor((x + 1) * samplesPerPixel)));
+        let min = 1, max = -1;
+        for (let i = start; i < end; i++) {
+          const v = channel[i];
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+        ctx.moveTo(x + .5, middle - max * rect.height * .43);
+        ctx.lineTo(x + .5, middle - min * rect.height * .43);
       }
-      ctx.moveTo(x + .5, middle - max * rect.height * .43);
-      ctx.lineTo(x + .5, middle - min * rect.height * .43);
+    } else if (peaks?.length) {
+      const start = Math.max(0, Math.min(peaks.length - 1, Math.floor(sourceStart / Math.max(.001, sourceEnd ?? (peaks.length ? peaks.length : 1)) * peaks.length)));
+      const end = Math.max(start + 1, Math.min(peaks.length, Math.ceil((sourceEnd ?? 1) / Math.max(.001, sourceEnd ?? 1) * peaks.length)));
+      for (let x = 0; x < rect.width; x++) {
+        const index = Math.min(peaks.length - 1, Math.floor(start + x / Math.max(1, rect.width) * (end - start)));
+        const amplitude = Math.max(.025, Math.min(1, peaks[index] ?? 0));
+        ctx.moveTo(x + .5, middle - amplitude * rect.height * .43);
+        ctx.lineTo(x + .5, middle + amplitude * rect.height * .43);
+      }
     }
     ctx.stroke();
-  }, [buffer, sourceStart, sourceEnd]);
+  }, [buffer, peaks, sourceStart, sourceEnd]);
   return <canvas ref={canvasRef} className="waveform" aria-label="Audio waveform" />;
 }
 
-function ClipWaveform({ buffer, sourceStart, sourceEnd }: { buffer?: AudioBuffer; sourceStart: number; sourceEnd: number }) {
-  return <Waveform buffer={buffer} sourceStart={sourceStart} sourceEnd={sourceEnd} />;
+function ClipWaveform({ buffer, peaks, sourceStart, sourceEnd }: { buffer?: AudioBuffer; peaks?: number[]; sourceStart: number; sourceEnd: number }) {
+  return <Waveform buffer={buffer} peaks={peaks} sourceStart={sourceStart} sourceEnd={sourceEnd} />;
 }
 
 export default function App() {
@@ -639,6 +651,38 @@ export default function App() {
     commitTracks((current) => current.map((track) => track.id === trackId ? { ...track, clips: [...track.clips, clip] } : track));
     setSelectedClip(clip.id);
     setStatus(`Added ${asset.name} to ${tracks.find((track) => track.id === trackId)?.name}.`);
+    if (!asset.waveformPeaks) void generateWaveformPeaks(asset);
+  }
+
+  async function generateWaveformPeaks(asset: ImportedAudio) {
+    if (assets.find((item) => item.id === asset.id)?.waveformPeaks) return;
+    let temporaryContext: AudioContext | null = null;
+    try {
+      setStatus(`Building waveform for ${asset.name}…`);
+      temporaryContext = new AudioContext();
+      const bytes = await asset.audioData.arrayBuffer();
+      const decoded = await temporaryContext.decodeAudioData(bytes);
+      const channelCount = decoded.numberOfChannels;
+      const bucketCount = 1200;
+      const peaks = new Array<number>(bucketCount).fill(0);
+      for (let bucket = 0; bucket < bucketCount; bucket++) {
+        const start = Math.floor(bucket * decoded.length / bucketCount);
+        const end = Math.max(start + 1, Math.floor((bucket + 1) * decoded.length / bucketCount));
+        let peak = 0;
+        for (let channel = 0; channel < channelCount; channel++) {
+          const samples = decoded.getChannelData(channel);
+          for (let i = start; i < Math.min(end, samples.length); i++) peak = Math.max(peak, Math.abs(samples[i]));
+        }
+        peaks[bucket] = peak;
+      }
+      setAssets((current) => current.map((item) => item.id === asset.id ? { ...item, waveformPeaks: peaks } : item));
+      setStatus(`Waveform ready: ${asset.name}.`);
+    } catch (error) {
+      console.warn("Could not build waveform without retaining decoded audio", error);
+      setStatus(`Added ${asset.name}; waveform preview is unavailable for this file.`);
+    } finally {
+      if (temporaryContext && temporaryContext.state !== "closed") void temporaryContext.close();
+    }
   }
   function updateClip(clipId: string, change: Partial<Clip>, recordHistory = true) {
     const updater = (current: Track[]) => current.map((track) => ({ ...track, clips: track.clips.map((clip) => clip.id === clipId ? { ...clip, ...change } : clip) }));
@@ -1039,7 +1083,7 @@ export default function App() {
                     <span className="fade-handle fade-out-handle" data-fade="fadeOut" style={{ right: `${Math.min(100, Math.max(0, (clip.fadeOut ?? 0) / duration * 100))}%` }} title="Drag to adjust Fade Out" aria-label="Adjust fade out" />
                   </>}
                   <span className={"trim-handle trim-left " + (trimMode ? "trim-enabled" : "trim-disabled")} data-edge="left" aria-label={trimMode ? "Trim clip start" : "Move clip from start edge"} />
-                  <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer ?? decodedAssetsRef.current.get(asset.id)} sourceStart={clip.sourceStart} sourceEnd={clip.sourceEnd} /></div>
+                  <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer ?? decodedAssetsRef.current.get(asset.id)} peaks={asset.waveformPeaks} sourceStart={clip.sourceStart} sourceEnd={clip.sourceEnd} /></div>
                   <span className={"trim-handle trim-right " + (trimMode ? "trim-enabled" : "trim-disabled")} data-edge="right" aria-label={trimMode ? "Trim clip end" : "Move clip from end edge"} />
                   {selectedClip === clip.id && <div className="clip-nudges"><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, -1); }}>− grid</button><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, 1); }}>+ grid</button></div>}
                 </div>;
