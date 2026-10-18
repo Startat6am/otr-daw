@@ -8,7 +8,7 @@ type ImportedAudio = {
   duration: number;
   sampleRate: number;
   channels: number;
-  buffer: AudioBuffer;
+  buffer?: AudioBuffer;
   audioData: Blob;
   bpm?: number;
 };
@@ -82,6 +82,18 @@ function formatTime(seconds: number) {
 }
 function uid() { return crypto.randomUUID(); }
 
+function readAudioDuration(blob: Blob): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio();
+    const url = URL.createObjectURL(blob);
+    const cleanup = () => { URL.revokeObjectURL(url); audio.removeAttribute("src"); audio.load(); };
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => { const duration = audio.duration; cleanup(); if (Number.isFinite(duration) && duration > 0) resolve(duration); else reject(new Error("Audio duration unavailable")); };
+    audio.onerror = () => { cleanup(); reject(new Error("Browser could not read audio metadata")); };
+    audio.src = url;
+  });
+}
+
 function bufferToBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -98,11 +110,11 @@ function base64ToBuffer(value: string) {
   return bytes.buffer;
 }
 
-function Waveform({ buffer, sourceStart = 0, sourceEnd = buffer.duration }: { buffer: AudioBuffer; sourceStart?: number; sourceEnd?: number }) {
+function Waveform({ buffer, sourceStart = 0, sourceEnd }: { buffer?: AudioBuffer; sourceStart?: number; sourceEnd?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !buffer) return;
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     canvas.width = Math.max(1, Math.floor(rect.width * dpr));
@@ -138,7 +150,7 @@ function Waveform({ buffer, sourceStart = 0, sourceEnd = buffer.duration }: { bu
   return <canvas ref={canvasRef} className="waveform" aria-label="Audio waveform" />;
 }
 
-function ClipWaveform({ buffer, sourceStart, sourceEnd }: { buffer: AudioBuffer; sourceStart: number; sourceEnd: number }) {
+function ClipWaveform({ buffer, sourceStart, sourceEnd }: { buffer?: AudioBuffer; sourceStart: number; sourceEnd: number }) {
   return <Waveform buffer={buffer} sourceStart={sourceStart} sourceEnd={sourceEnd} />;
 }
 
@@ -186,6 +198,7 @@ export default function App() {
   const redoStackRef = useRef<Track[][]>([]);
   const PX_PER_SECOND = BASE_PX_PER_SECOND * timelineZoom;
   const contextRef = useRef<AudioContext | null>(null);
+  const decodedAssetsRef = useRef<Map<string, AudioBuffer>>(new Map());
   const sourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const stretchedBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
   const resumeAfterTempoChangeRef = useRef(false);
@@ -236,9 +249,8 @@ export default function App() {
           for (const item of saved.assets) {
             try {
               const audioBlob = item.audioData instanceof Blob ? item.audioData : new Blob([item.audioData], { type: "application/octet-stream" });
-              const decodeBytes = await audioBlob.arrayBuffer();
-              const buffer = await context.decodeAudioData(decodeBytes);
-              restoredAssets.push({ ...item, audioData: audioBlob, buffer, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, bpm: typeof item.bpm === "number" ? item.bpm : detectBpm(buffer) });
+              // Restore metadata and compressed audio only; decode PCM on playback.
+              restoredAssets.push({ ...item, audioData: audioBlob, buffer: undefined });
             } catch {
               // Keep the rest of the project available if one stored audio file is no longer decodable.
             }
@@ -351,8 +363,7 @@ export default function App() {
         if (typeof item.audioData !== "string") throw new Error("Project audio data is missing");
         const decodedBytes = base64ToBuffer(item.audioData);
         const audioBlob = new Blob([decodedBytes], { type: "application/octet-stream" });
-        const buffer = await context.decodeAudioData(decodedBytes.slice(0));
-        restoredAssets.push({ ...item, audioData: audioBlob, buffer, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels });
+        restoredAssets.push({ ...item, audioData: audioBlob, buffer: undefined });
       }
       const restoredTracks: Track[] = parsed.tracks.map((track: Track) => ({
         ...track,
@@ -469,10 +480,16 @@ export default function App() {
       const cacheKey = `${clip.id}:${clip.sourceStart}:${clip.sourceEnd}:${bpm}:${asset.id}`;
       let stretched = stretchedBuffersRef.current.get(cacheKey);
       if (!stretched) {
-        const startFrame = Math.max(0, Math.floor(clip.sourceStart * asset.buffer.sampleRate));
-        const endFrame = Math.min(asset.buffer.length, Math.max(startFrame + 1, Math.floor(clip.sourceEnd * asset.buffer.sampleRate)));
-        const segment = context.createBuffer(asset.buffer.numberOfChannels, endFrame - startFrame, asset.buffer.sampleRate);
-        for (let channel = 0; channel < asset.buffer.numberOfChannels; channel++) segment.copyToChannel(asset.buffer.getChannelData(channel).subarray(startFrame, endFrame), channel);
+        let decoded = asset.buffer ?? decodedAssetsRef.current.get(asset.id);
+        if (!decoded) {
+          const compressedBytes = await asset.audioData.arrayBuffer();
+          decoded = await context.decodeAudioData(compressedBytes);
+          decodedAssetsRef.current.set(asset.id, decoded);
+        }
+        const startFrame = Math.max(0, Math.floor(clip.sourceStart * decoded.sampleRate));
+        const endFrame = Math.min(decoded.length, Math.max(startFrame + 1, Math.floor(clip.sourceEnd * decoded.sampleRate)));
+        const segment = context.createBuffer(decoded.numberOfChannels, endFrame - startFrame, decoded.sampleRate);
+        for (let channel = 0; channel < decoded.numberOfChannels; channel++) segment.copyToChannel(decoded.getChannelData(channel).subarray(startFrame, endFrame), channel);
         stretched = timeStretchBuffer(segment, stretchRatio, context);
         stretchedBuffersRef.current.set(cacheKey, stretched);
       }
@@ -602,7 +619,7 @@ export default function App() {
   async function importFiles(files: FileList | null) {
     if (!files?.length) return;
     setBusy(true);
-    setStatus("Decoding audio…");
+    setStatus("Reading audio metadata…");
     try {
       const context = getContext();
       if (context.state === "suspended") await context.resume();
@@ -611,11 +628,9 @@ export default function App() {
       for (const file of Array.from(files)) {
         if (!/\.(wav|mp3|ogg|oga)$/i.test(file.name) && !file.type.startsWith("audio/")) continue;
         try {
-          const decodeBytes = await file.arrayBuffer();
-          const buffer = await context.decodeAudioData(decodeBytes);
-          const detectedBpm = detectBpm(buffer);
-          // Keep the original as a Blob; retaining a second compressed ArrayBuffer wastes memory.
-          imported.push({ id: uid(), name: file.name, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, buffer, audioData: file.slice(0, file.size, file.type || "application/octet-stream"), bpm: detectedBpm });
+          const audioBlob = file.slice(0, file.size, file.type || "application/octet-stream");
+          const duration = await readAudioDuration(audioBlob);
+          imported.push({ id: uid(), name: file.name, duration, sampleRate: 44100, channels: 2, buffer: undefined, audioData: audioBlob });
         } catch (error) {
           console.error("Audio file import failed", file.name, error);
           failedFiles++;
@@ -1078,7 +1093,7 @@ export default function App() {
                     <span className="fade-handle fade-out-handle" data-fade="fadeOut" style={{ right: `${Math.min(100, Math.max(0, (clip.fadeOut ?? 0) / duration * 100))}%` }} title="Drag to adjust Fade Out" aria-label="Adjust fade out" />
                   </>}
                   <span className={"trim-handle trim-left " + (trimMode ? "trim-enabled" : "trim-disabled")} data-edge="left" aria-label={trimMode ? "Trim clip start" : "Move clip from start edge"} />
-                  <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer} sourceStart={clip.sourceStart} sourceEnd={clip.sourceEnd} /></div>
+                  <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer ?? decodedAssetsRef.current.get(asset.id)} sourceStart={clip.sourceStart} sourceEnd={clip.sourceEnd} /></div>
                   <span className={"trim-handle trim-right " + (trimMode ? "trim-enabled" : "trim-disabled")} data-edge="right" aria-label={trimMode ? "Trim clip end" : "Move clip from end edge"} />
                   {selectedClip === clip.id && <div className="clip-nudges"><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, -1); }}>− grid</button><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, 1); }}>+ grid</button></div>}
                 </div>;
