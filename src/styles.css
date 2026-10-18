@@ -1180,3 +1180,44 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 @media (max-width: 520px) {
   .waveform-detail-toggle { min-height: 21px; font-size: 7px; }
 }
+
+
+/* Mobile-first insertable mixer effects */
+.channel-effects { position: relative; display: grid; gap: 7px; margin-top: 9px; }
+.effect-list { display: grid; gap: 5px; }
+.effect-module { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 29px; padding: 5px 6px; border: 1px solid #3d5148; border-radius: 6px; background: #202823; color: #dce7e0; text-align: left; font: 700 8px 'DM Mono', monospace; cursor: pointer; touch-action: manipulation; }
+.effect-module-selected { border-color: var(--mint); background: #243a30; }
+.effect-module-bypassed { opacity: .55; }
+.effect-module-led { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 7px #9be7cf66; }
+.effect-module-bypassed .effect-module-led { background: #6b7470; box-shadow: none; }
+.effect-module small { margin-left: auto; color: #9aa69f; font-size: 7px; }
+.add-effect-button { width: 100%; min-height: 34px; border: 1px dashed #557365; border-radius: 7px; background: #1b2822; color: var(--mint); font: 700 9px 'DM Mono', monospace; cursor: pointer; touch-action: manipulation; }
+.effect-picker { position: absolute; z-index: 50; left: 0; right: 0; bottom: calc(100% + 5px); display: grid; gap: 5px; padding: 9px; border: 1px solid #43594d; border-radius: 10px; background: #171d19; box-shadow: 0 10px 35px #000b; }
+.effect-picker > strong { padding: 3px 4px 5px; color: #aab8b0; font: 9px 'DM Mono', monospace; text-transform: uppercase; }
+.effect-picker button { display: grid; gap: 3px; width: 100%; padding: 9px; border: 1px solid #303c34; border-radius: 6px; background: #202722; color: #f1f1ed; text-align: left; font-size: 11px; cursor: pointer; }
+.effect-picker button small { color: #9aa69f; font-size: 9px; }
+.effect-editor-backdrop { position: fixed; z-index: 1000; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: 12px; background: #0009; }
+.effect-editor { width: min(100%, 440px); max-height: min(82dvh, 650px); overflow-y: auto; padding: 18px; border: 1px solid #3b4d43; border-radius: 18px 18px 14px 14px; background: #171a18; box-shadow: 0 20px 70px #000a; }
+.effect-editor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.effect-editor-header .eyebrow { margin-bottom: 7px; font-size: 9px; }
+.effect-editor-header h2 { font-size: 23px; }
+.effect-close { width: 38px; height: 38px; border: 1px solid #3b443e; border-radius: 10px; background: #222723; color: #f1f1ed; font-size: 24px; cursor: pointer; }
+.effect-enable { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 46px; margin-bottom: 18px; color: #d3dbd6; font-size: 12px; }
+.effect-enable input { width: 22px; height: 22px; accent-color: var(--mint); }
+.effect-param { display: grid; gap: 12px; margin: 18px 0; color: #cbd4ce; font-size: 12px; }
+.effect-param span { display: flex; justify-content: space-between; gap: 10px; }
+.effect-param b { color: var(--mint); font: 11px 'DM Mono', monospace; }
+.effect-param input[type="range"] { width: 100%; accent-color: var(--mint); min-height: 28px; }
+.effect-info { padding: 14px; border: 1px solid #2e3c33; border-radius: 10px; background: #1d2620; font-size: 12px; }
+.effect-info p { margin: 8px 0 0; color: #9eaaa2; line-height: 1.6; }
+.effect-editor-actions { display: flex; gap: 9px; margin-top: 22px; }
+.effect-editor-actions button { flex: 1; min-height: 42px; border-radius: 9px; font-size: 12px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.effect-remove { border: 1px solid #694646; background: #2b1d1d; color: #e6a6a6; }
+.effect-done { border: 1px solid #527263; background: #263a30; color: var(--mint); }
+@media (max-width: 520px) {
+  .channel-effects { gap: 6px; }
+  .effect-module { min-height: 32px; font-size: 7px; }
+  .add-effect-button { min-height: 38px; font-size: 8px; }
+  .effect-editor-backdrop { padding: 8px; }
+  .effect-editor { padding: 16px; }
+}
