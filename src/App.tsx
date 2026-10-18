@@ -38,7 +38,15 @@ function readAudioDuration(blob: Blob): Promise<number> {
   return new Promise((resolve, reject) => {
     const audio = new Audio();
     const url = URL.createObjectURL(blob);
-    const cleanup = () => { URL.revokeObjectURL(url); audio.removeAttribute("src"); audio.load(); };
+    const cleanup = () => {
+      audio.onloadedmetadata = null;
+      audio.onerror = null;
+      audio.pause();
+      audio.removeAttribute("src");
+      // Do not call load() after removing src: on mobile browsers this can
+      // trigger another media load/reset during file-picker handoff.
+      URL.revokeObjectURL(url);
+    };
     audio.preload = "metadata";
     audio.onloadedmetadata = () => { const duration = audio.duration; cleanup(); if (Number.isFinite(duration) && duration > 0) resolve(duration); else reject(new Error("Audio duration unavailable")); };
     audio.onerror = () => { cleanup(); reject(new Error("Browser could not read audio metadata")); };
