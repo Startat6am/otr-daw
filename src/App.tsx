@@ -24,56 +24,6 @@ const INITIAL_TRACKS: Track[] = [
 ];
 
 
-function detectBpm(buffer: AudioBuffer): number | undefined {
-  // Build a lightweight onset envelope at 100 Hz, capped at two minutes.
-  const channelCount = buffer.numberOfChannels;
-  const hop = Math.max(1, Math.round(buffer.sampleRate / 100));
-  const frameCount = Math.min(Math.floor(buffer.length / hop), 12000);
-  if (frameCount < 150) return undefined;
-  const energy = new Float32Array(frameCount);
-  for (let frame = 0; frame < frameCount; frame++) {
-    const start = frame * hop;
-    const end = Math.min(buffer.length, start + hop);
-    let sum = 0;
-    for (let channel = 0; channel < channelCount; channel++) {
-      const samples = buffer.getChannelData(channel);
-      for (let i = start; i < end; i++) sum += samples[i] * samples[i];
-    }
-    energy[frame] = Math.sqrt(sum / Math.max(1, (end - start) * channelCount));
-  }
-  const onset = new Float32Array(frameCount);
-  let mean = 0;
-  for (let i = 1; i < frameCount; i++) {
-    onset[i] = Math.max(0, energy[i] - energy[i - 1]);
-    mean += onset[i];
-  }
-  mean /= frameCount;
-  if (mean < 0.00002) return undefined;
-  let variance = 0;
-  for (let i = 0; i < frameCount; i++) {
-    onset[i] = Math.max(0, onset[i] - mean * 0.35);
-    variance += onset[i] * onset[i];
-  }
-  if (variance < 1e-8) return undefined;
-  let bestLag = 0;
-  let bestScore = 0;
-  const minLag = Math.floor(6000 / MAX_BPM);
-  const maxLag = Math.ceil(6000 / MIN_BPM);
-  for (let lag = minLag; lag <= maxLag; lag++) {
-    let score = 0;
-    for (let i = lag; i < frameCount; i++) score += onset[i] * onset[i - lag];
-    // Prefer a genuine periodic peak while mildly compensating for longer lags.
-    score /= Math.sqrt(frameCount - lag);
-    if (score > bestScore) { bestScore = score; bestLag = lag; }
-  }
-  if (!bestLag || bestScore <= 0) return undefined;
-  let detected = Math.round(6000 / bestLag);
-  // Bring common half/double-time estimates into a practical musical range.
-  while (detected < 70) detected *= 2;
-  while (detected > 180) detected /= 2;
-  return Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(detected)));
-}
-
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
   const minutes = Math.floor(seconds / 60);
@@ -129,7 +79,7 @@ function Waveform({ buffer, sourceStart = 0, sourceEnd }: { buffer?: AudioBuffer
     ctx.beginPath();
     const channel = buffer.getChannelData(0);
     const rangeStart = Math.max(0, Math.min(channel.length - 1, Math.floor(sourceStart * buffer.sampleRate)));
-    const rangeEnd = Math.max(rangeStart + 1, Math.min(channel.length, Math.floor(sourceEnd * buffer.sampleRate)));
+    const rangeEnd = Math.max(rangeStart + 1, Math.min(channel.length, Math.floor((sourceEnd ?? buffer.duration) * buffer.sampleRate)));
     const rangeLength = rangeEnd - rangeStart;
     const samplesPerPixel = Math.max(1, rangeLength / Math.max(1, rect.width));
     const middle = rect.height / 2;
