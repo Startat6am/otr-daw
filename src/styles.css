@@ -1154,3 +1154,29 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .volume-control { min-height: 126px; }
   .volume-control input[type="range"] { height: 82px; min-height: 82px; }
 }
+
+
+/* Per-track waveform detail switch in the expanded timeline sidebar. */
+.waveform-detail-toggle {
+  align-self: stretch;
+  min-height: 22px;
+  padding: 3px 4px;
+  border: 1px solid #39443d;
+  border-radius: 5px;
+  background: #202622;
+  color: #9aa69f;
+  font: 7px/1.2 'DM Mono', monospace;
+  letter-spacing: .025em;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.waveform-detail-toggle.is-active {
+  border-color: var(--mint);
+  background: #20372d;
+  color: var(--mint);
+}
+.waveform-detail-toggle:disabled { opacity: .5; cursor: wait; }
+@media (max-width: 520px) {
+  .waveform-detail-toggle { min-height: 21px; font-size: 7px; }
+}
