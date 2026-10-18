@@ -455,6 +455,7 @@ export default function App() {
       if (!node || node.context !== context || !panner || panner.context !== context) {
         node = context.createGain();
         panner = context.createStereoPanner();
+        panner.connect(masterNodeRef.current!);
         mixerNodesRef.current.set(track.id, node);
         pannerNodesRef.current.set(track.id, panner);
         effectNodesRef.current.delete(track.id);
