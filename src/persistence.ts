@@ -5,6 +5,8 @@ export type SavedAsset = {
   sampleRate: number;
   channels: number;
   audioData: ArrayBuffer | Blob;
+  waveformPeaks?: number[];
+  waveformPeaksDetailed?: number[];
   bpm?: number;
 };
 
