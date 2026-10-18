@@ -210,7 +210,7 @@ export default function App() {
   const masterGainRef = useRef(0.85);
   const mixerNodesRef = useRef<Map<string, GainNode>>(new Map());
   const pannerNodesRef = useRef<Map<string, StereoPannerNode>>(new Map());
-  const effectNodesRef = useRef<Map<string, { type: EffectType; nodes: AudioNode[] }>>(new Map());
+  const effectNodesRef = useRef<Map<string, { type: string; nodes: AudioNode[] }>>(new Map());
   const trackKnobGestureRef = useRef<{ trackId: string; kind: "pan" | "gain"; startY: number; startValue: number; pointerId: number } | null>(null);
   const masterNodeRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -461,7 +461,7 @@ export default function App() {
       }
       const effects = (track.effects ?? []).filter((effect) => effect.enabled);
       const previous = effectNodesRef.current.get(track.id);
-      if (!previous || previous.nodes.some((item) => item.context !== context) || previous.nodes.length !== effects.length || effects.some((effect, index) => previous.nodes[index] && previous.type !== effect.type)) {
+      if (!previous || previous.nodes.some((item) => item.context !== context) || previous.nodes.length !== effects.length || previous.type !== effects.map((effect) => effect.type).join(",")) {
         previous?.nodes.forEach((item) => { try { item.disconnect(); } catch { /* already disconnected */ } });
         const nodes: AudioNode[] = effects.map((effect) => {
           if (effect.type === "volume") return context.createGain();
@@ -476,7 +476,7 @@ export default function App() {
           convolver.buffer = impulse;
           return convolver;
         });
-        effectNodesRef.current.set(track.id, { type: effects.map((effect) => effect.type).join(",") as EffectType, nodes });
+        effectNodesRef.current.set(track.id, { type: effects.map((effect) => effect.type).join(","), nodes });
         node.disconnect();
         node.connect(nodes[0] as AudioNode || panner);
         nodes.forEach((item, index) => { if (index + 1 < nodes.length) item.connect(nodes[index + 1]); else item.connect(panner!); });
