@@ -510,8 +510,6 @@ export default function App() {
       const audible = !track.muted && (!soloActive || track.solo);
       node.gain.setTargetAtTime(audible ? track.gain : 0, context.currentTime, 0.015);
       panner.pan.setTargetAtTime(Math.max(-1, Math.min(1, track.pan ?? 0)), context.currentTime, 0.015);
-      panner.disconnect();
-      panner.connect(masterNodeRef.current!);
     });
   }
   function addEffect(trackId: string, type: EffectType) {
