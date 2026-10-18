@@ -250,7 +250,7 @@ export default function App() {
       const project: SavedProject = {
         schemaVersion: 1,
         updatedAt: new Date().toISOString(),
-        assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: asset.audioData, bpm: asset.bpm })),
+        assets: assets.map((asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: asset.audioData, waveformPeaks: asset.waveformPeaks, bpm: asset.bpm })),
         tracks,
         settings: { snapEnabled, timelineZoom, masterGain, bpm },
       };
@@ -294,7 +294,7 @@ export default function App() {
         schemaVersion: 1,
         updatedAt: new Date().toISOString(),
         projectName: projectName.trim() || "Untitled project",
-        assets: await Promise.all(assets.map(async (asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: bufferToBase64(await asset.audioData.arrayBuffer()), bpm: asset.bpm }))),
+        assets: await Promise.all(assets.map(async (asset) => ({ id: asset.id, name: asset.name, duration: asset.duration, sampleRate: asset.sampleRate, channels: asset.channels, audioData: bufferToBase64(await asset.audioData.arrayBuffer()), waveformPeaks: asset.waveformPeaks, bpm: asset.bpm }))),
         tracks,
         settings: { snapEnabled, timelineZoom, masterGain, bpm },
       };
