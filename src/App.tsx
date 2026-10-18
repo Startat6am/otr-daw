@@ -987,14 +987,15 @@ export default function App() {
           }}
           onPointerUp={(event) => { if (timelinePanRef.current?.pointerId === event.pointerId) timelinePanRef.current = null; }}
           onPointerCancel={() => { timelinePanRef.current = null; }}>
-          <div className="timeline-inner" style={{ width: timelineWidth + (trackSidebarCollapsed ? 24 : (window.innerWidth <= 520 ? 107 : 135)) }}>
-            <div className="timeline-gutter"><button className="sidebar-toggle" type="button" aria-label={trackSidebarCollapsed ? "Expand track sidebar" : "Collapse track sidebar"} title={trackSidebarCollapsed ? "Expand track sidebar" : "Collapse track sidebar"} onClick={() => setTrackSidebarCollapsed((value) => !value)}>{trackSidebarCollapsed ? "›" : "‹"}</button></div><div className="ruler" style={{ width: timelineWidth }} onPointerDown={(event) => {
+          <div className="timeline-inner" style={{ width: timelineWidth + (trackSidebarCollapsed ? 27 : (window.innerWidth <= 520 ? 107 : 135)) }}>
+            <div className="timeline-gutter"><button className="sidebar-toggle" type="button" aria-label={trackSidebarCollapsed ? "Expand track sidebar" : "Collapse track sidebar"} title={trackSidebarCollapsed ? "Expand track sidebar" : "Collapse track sidebar"} onClick={() => setTrackSidebarCollapsed((value) => !value)}>{trackSidebarCollapsed ? "›" : "‹"}</button></div><div className="special-marker-strip" style={{ width: timelineWidth }} aria-label="Special timeline markers">
+              <div className="loop-marker loop-marker-start" style={{ left: loopStart * PX_PER_SECOND }} title={`Loop start ${formatTime(loopStart)}`}><span>IN</span></div>
+              <div className="loop-marker loop-marker-end" style={{ left: loopEnd * PX_PER_SECOND }} title={`Loop end ${formatTime(loopEnd)}`}><span>OUT</span></div>
+            </div><div className="ruler" style={{ width: timelineWidth }} onPointerDown={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
               seekPlayhead((event.clientX - rect.left) / PX_PER_SECOND);
             }}>
               {loopEnd > loopStart && <div className={loopEnabled ? "loop-range loop-range-active" : "loop-range"} style={{ left: loopStart * PX_PER_SECOND, width: Math.max(2, (loopEnd - loopStart) * PX_PER_SECOND) }} aria-label={`Loop range from ${formatTime(loopStart)} to ${formatTime(loopEnd)}`} />}
-              <div className="loop-marker loop-marker-start" style={{ left: loopStart * PX_PER_SECOND }} title={`Loop start ${formatTime(loopStart)}`}><span>IN</span></div>
-              <div className="loop-marker loop-marker-end" style={{ left: loopEnd * PX_PER_SECOND }} title={`Loop end ${formatTime(loopEnd)}`}><span>OUT</span></div>
               {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * BEAT * 4 * PX_PER_SECOND }}><span>{String(i + 1).padStart(2, "0")}</span></div>)}
             </div>
             {tracks.map((track) => <div className="timeline-track" data-track-id={track.id} key={track.id} style={{ width: timelineWidth, backgroundImage: `repeating-linear-gradient(to right, #252a28 0, #252a28 1px, transparent 1px, transparent ${Math.max(1, BEAT * 4 / gridDivision * PX_PER_SECOND)}px)` }}>
@@ -1091,10 +1092,10 @@ export default function App() {
                 </div>;
               })}
             </div>)}
-            <div className="track-sidebar-footer" style={{ width: timelineWidth + (trackSidebarCollapsed ? 24 : (window.innerWidth <= 520 ? 107 : 135)) }}>
+            <div className="track-sidebar-footer" style={{ width: timelineWidth + (trackSidebarCollapsed ? 27 : (window.innerWidth <= 520 ? 107 : 135)) }}>
               <button className="sidebar-add-track" onClick={addTrack} disabled={tracks.length >= 16}><span>＋</span> Add track</button>
             </div>
-            <div className="playhead" style={{ left: playhead * PX_PER_SECOND + (trackSidebarCollapsed ? 24 : (window.innerWidth <= 520 ? 107 : 135)) }} />
+            <div className="playhead" style={{ left: playhead * PX_PER_SECOND + (trackSidebarCollapsed ? 27 : (window.innerWidth <= 520 ? 107 : 135)) }} />
           </div>
         </div>
         <p className="timeline-hint">Horizontal scroll · 4/4 grid · one beat = {BEAT.toFixed(2)}s · {snapEnabled ? "snap 1/" + gridDivision : "free positioning"} · trim {trimMode ? "enabled (destructive)" : "disabled"} · loop {loopEnabled ? "enabled" : "disabled"}. Zoom: {Math.round(timelineZoom * 100)}%.</p>
