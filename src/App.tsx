@@ -61,6 +61,36 @@ function base64ToBuffer(value: string) {
   return bytes.buffer;
 }
 
+function audioBufferBytes(buffer: AudioBuffer) {
+  return buffer.length * buffer.numberOfChannels * Float32Array.BYTES_PER_ELEMENT;
+}
+
+function getCachedBuffer(cache: Map<string, AudioBuffer>, key: string) {
+  const buffer = cache.get(key);
+  if (!buffer) return undefined;
+  // Refresh insertion order so the cache behaves as LRU.
+  cache.delete(key);
+  cache.set(key, buffer);
+  return buffer;
+}
+
+function cacheAudioBuffer(cache: Map<string, AudioBuffer>, key: string, buffer: AudioBuffer, maxBytes: number) {
+  const bytes = audioBufferBytes(buffer);
+  if (bytes > maxBytes) return buffer; // Use it for the current operation, but do not retain it.
+  cache.delete(key);
+  cache.set(key, buffer);
+  let total = 0;
+  for (const item of cache.values()) total += audioBufferBytes(item);
+  while (total > maxBytes && cache.size > 0) {
+    const oldestKey = cache.keys().next().value as string | undefined;
+    if (oldestKey === undefined) break;
+    const oldest = cache.get(oldestKey);
+    cache.delete(oldestKey);
+    if (oldest) total -= audioBufferBytes(oldest);
+  }
+  return buffer;
+}
+
 function Waveform({ buffer, peaks, duration, sourceStart = 0, sourceEnd }: { buffer?: AudioBuffer; peaks?: number[]; duration?: number; sourceStart?: number; sourceEnd?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -164,8 +194,13 @@ export default function App() {
   const PX_PER_SECOND = BASE_PX_PER_SECOND * timelineZoom;
   const contextRef = useRef<AudioContext | null>(null);
   const decodedAssetsRef = useRef<Map<string, AudioBuffer>>(new Map());
+  const decodePromisesRef = useRef<Map<string, Promise<AudioBuffer>>>(new Map());
   const sourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const stretchedBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
+  // Keep decoded PCM and time-stretched copies bounded on memory-constrained phones.
+  const decodedCacheBudgetBytes = 48 * 1024 * 1024;
+  const stretchedCacheBudgetBytes = 24 * 1024 * 1024;
+  const stretchWorkingBudgetBytes = 16 * 1024 * 1024;
   const resumeAfterTempoChangeRef = useRef(false);
   const playingRef = useRef(false);
   const playheadRef = useRef(0);
@@ -269,6 +304,9 @@ export default function App() {
     if ((assets.length || tracks.some((track) => track.clips.length)) && !window.confirm("Create a new project? Export or save your current project first if you want to keep it.")) return;
     stopTransport();
     setAssets([]);
+    decodedAssetsRef.current.clear();
+    decodePromisesRef.current.clear();
+    stretchedBuffersRef.current.clear();
     const freshTracks = INITIAL_TRACKS.map((track) => ({ ...track, id: uid(), clips: [] }));
     tracksRef.current = freshTracks;
     setTracks(freshTracks);
@@ -337,6 +375,9 @@ export default function App() {
         clips: track.clips.filter((clip) => restoredAssets.some((asset) => asset.id === clip.assetId)),
       }));
       stopTransport();
+      decodedAssetsRef.current.clear();
+      decodePromisesRef.current.clear();
+      stretchedBuffersRef.current.clear();
       setAssets(restoredAssets);
       tracksRef.current = restoredTracks;
       setTracks(restoredTracks);
@@ -422,6 +463,30 @@ export default function App() {
     rafRef.current = null;
     stopSources();
   }
+  async function getDecodedAsset(asset: ImportedAudio, context: AudioContext) {
+    const cached = asset.buffer ?? getCachedBuffer(decodedAssetsRef.current, asset.id);
+    if (cached) return cached;
+    const pending = decodePromisesRef.current.get(asset.id);
+    if (pending) return pending;
+    const decoding = (async () => {
+      // Only the compressed file is read here. PCM is created on first playback, not on import.
+      const compressedBytes = await asset.audioData.arrayBuffer();
+      const decoded = await context.decodeAudioData(compressedBytes);
+      cacheAudioBuffer(decodedAssetsRef.current, asset.id, decoded, decodedCacheBudgetBytes);
+      if (!asset.waveformPeaks) {
+        const waveformPeaks = peaksFromBuffer(decoded);
+        setAssets((current) => current.map((item) => item.id === asset.id ? { ...item, waveformPeaks } : item));
+      }
+      return decoded;
+    })();
+    decodePromisesRef.current.set(asset.id, decoding);
+    try {
+      return await decoding;
+    } finally {
+      if (decodePromisesRef.current.get(asset.id) === decoding) decodePromisesRef.current.delete(asset.id);
+    }
+  }
+
   async function scheduleFrom(position: number, context: AudioContext) {
     stopSources();
     ensureMixer(context, tracksRef.current);
@@ -440,31 +505,46 @@ export default function App() {
       const clipEnd = clip.start + clipDuration;
       if (clipEnd <= position) continue;
       const elapsed = Math.max(0, position - clip.start);
-      const cacheKey = `${clip.id}:${clip.sourceStart}:${clip.sourceEnd}:${bpm}:${asset.id}`;
-      let stretched = stretchedBuffersRef.current.get(cacheKey);
-      if (!stretched) {
-        let decoded = asset.buffer ?? decodedAssetsRef.current.get(asset.id);
-        if (!decoded) {
-          const compressedBytes = await asset.audioData.arrayBuffer();
-          decoded = await context.decodeAudioData(compressedBytes);
-          decodedAssetsRef.current.set(asset.id, decoded);
-          if (!asset.waveformPeaks) {
-            const waveformPeaks = peaksFromBuffer(decoded);
-            setAssets((current) => current.map((item) => item.id === asset.id ? { ...item, waveformPeaks } : item));
-          }
-        }
-        const startFrame = Math.max(0, Math.floor(clip.sourceStart * decoded.sampleRate));
-        const endFrame = Math.min(decoded.length, Math.max(startFrame + 1, Math.floor(clip.sourceEnd * decoded.sampleRate)));
-        const segment = context.createBuffer(decoded.numberOfChannels, endFrame - startFrame, decoded.sampleRate);
-        for (let channel = 0; channel < decoded.numberOfChannels; channel++) segment.copyToChannel(decoded.getChannelData(channel).subarray(startFrame, endFrame), channel);
-        stretched = timeStretchBuffer(segment, stretchRatio, context);
-        stretchedBuffersRef.current.set(cacheKey, stretched);
-      }
-      const offset = elapsed;
       const duration = Math.min(clipDuration - elapsed, playbackLimit - Math.max(position, clip.start));
       if (duration <= 0) continue;
+      const cacheKey = `${clip.id}:${clip.sourceStart}:${clip.sourceEnd}:${bpm}:${asset.id}`;
+      let playbackBuffer: AudioBuffer;
+      let offset: number;
+      let sourcePlayDuration: number;
+      let playbackRate = 1;
+      const needsStretch = Math.abs(stretchRatio - 1) >= 0.002;
+      const estimatedFrames = Math.max(1, Math.ceil(sourceDuration * 44100 * stretchRatio));
+      const estimatedWorkingBytes = estimatedFrames * (asset.channels * Float32Array.BYTES_PER_ELEMENT + Float32Array.BYTES_PER_ELEMENT)
+        + Math.ceil(sourceDuration * 44100) * asset.channels * Float32Array.BYTES_PER_ELEMENT;
+      // For long clips, playback-rate adjustment is much cheaper than allocating a full
+      // stretched PCM copy plus its overlap-add weight array.
+      const useRealtimeRate = needsStretch && estimatedWorkingBytes > stretchWorkingBudgetBytes;
+      if (!needsStretch || useRealtimeRate) {
+        const decoded = await getDecodedAsset(asset, context);
+        playbackBuffer = decoded;
+        playbackRate = useRealtimeRate ? 1 / stretchRatio : 1;
+        offset = clip.sourceStart + (useRealtimeRate ? elapsed / stretchRatio : elapsed);
+        sourcePlayDuration = useRealtimeRate ? duration / stretchRatio : duration;
+      } else {
+        let stretched = getCachedBuffer(stretchedBuffersRef.current, cacheKey);
+        if (!stretched) {
+          const decoded = await getDecodedAsset(asset, context);
+          const startFrame = Math.max(0, Math.min(decoded.length - 1, Math.floor(clip.sourceStart * decoded.sampleRate)));
+          const endFrame = Math.min(decoded.length, Math.max(startFrame + 1, Math.floor(clip.sourceEnd * decoded.sampleRate)));
+          const segment = context.createBuffer(decoded.numberOfChannels, endFrame - startFrame, decoded.sampleRate);
+          for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
+            segment.copyToChannel(decoded.getChannelData(channel).subarray(startFrame, endFrame), channel);
+          }
+          stretched = timeStretchBuffer(segment, stretchRatio, context);
+          cacheAudioBuffer(stretchedBuffersRef.current, cacheKey, stretched, stretchedCacheBudgetBytes);
+        }
+        playbackBuffer = stretched;
+        offset = elapsed;
+        sourcePlayDuration = duration;
+      }
       const source = context.createBufferSource();
-      source.buffer = stretched;
+      source.buffer = playbackBuffer;
+      source.playbackRate.value = playbackRate;
       const trackGain = mixerNodesRef.current.get(track.id);
       if (!trackGain) return;
       const fadeInGain = context.createGain();
@@ -493,7 +573,7 @@ export default function App() {
         }
       }
       sourcesRef.current.push(source);
-      source.start(scheduledAt, offset, duration);
+      source.start(scheduledAt, offset, sourcePlayDuration);
     }
     playingRef.current = true;
     setIsPlaying(true);
@@ -517,7 +597,21 @@ export default function App() {
       setStatus("Add an audio clip to a track before pressing play.");
       return;
     }
-    await scheduleFrom(playheadRef.current, context);
+    try {
+      await scheduleFrom(playheadRef.current, context);
+    } catch (error) {
+      console.error("Audio playback could not be scheduled", error);
+      stopSources();
+      playingRef.current = false;
+      setIsPlaying(false);
+      // A failed decode may leave substantial temporary allocations. Drop caches so a retry starts clean.
+      decodedAssetsRef.current.clear();
+      stretchedBuffersRef.current.clear();
+      const reason = error instanceof Error ? error.message : String(error);
+      setStatus(reason.toLowerCase().includes("memory")
+        ? "The browser ran out of audio memory. Caches were released; reload the project and try again."
+        : "Could not start audio playback. Try reloading the project or using a shorter audio clip.");
+    }
   }
   function stopTransport() {
     pauseTransport();
@@ -659,7 +753,8 @@ export default function App() {
     setAssets((current) => current.filter((item) => item.id !== asset.id));
     if (uses > 0) commitTracks((current) => current.map((track) => ({ ...track, clips: track.clips.filter((clip) => clip.assetId !== asset.id) })));
     decodedAssetsRef.current.delete(asset.id);
-    for (const key of stretchedBuffersRef.current.keys()) if (key.includes(`:${asset.id}`)) stretchedBuffersRef.current.delete(key);
+    decodePromisesRef.current.delete(asset.id);
+    for (const key of stretchedBuffersRef.current.keys()) if (key.endsWith(`:${asset.id}`)) stretchedBuffersRef.current.delete(key);
     setStatus(`"${asset.name}" removed from the library.`);
   }
 
