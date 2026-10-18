@@ -1000,3 +1000,35 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   top: 0;
   z-index: 21;
 }
+
+
+/* Compact controls for collapsible workspace panels and library cleanup */
+.collapse-button {
+  flex: 0 0 auto;
+  border: 1px solid #3b544a;
+  border-radius: 9px;
+  background: #203029;
+  color: var(--mint);
+  padding: 8px 11px;
+  min-height: 36px;
+  font-size: 11px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mixer-heading-actions { display: flex; align-items: center; gap: 12px; }
+.asset-actions { flex-wrap: wrap; align-items: center; }
+.remove-asset-button {
+  border: 1px solid #634343;
+  border-radius: 8px;
+  background: #2b1d1d;
+  color: #e6a6a6;
+  padding: 8px 10px;
+  font-size: 10px;
+  cursor: pointer;
+  min-height: 34px;
+  touch-action: manipulation;
+}
+@media (max-width: 520px) {
+  .mixer-heading-actions { gap: 7px; }
+  .collapse-button { padding: 7px 9px; font-size: 10px; }
+}
