@@ -605,18 +605,23 @@ export default function App() {
       const context = getContext();
       if (context.state === "suspended") await context.resume();
       const imported: ImportedAudio[] = [];
+      let failedFiles = 0;
       for (const file of Array.from(files)) {
         if (!/\.(wav|mp3|ogg|oga)$/i.test(file.name) && !file.type.startsWith("audio/")) continue;
-        const audioData = await file.arrayBuffer();
-        const buffer = await context.decodeAudioData(audioData.slice(0));
-        const detectedBpm = detectBpm(buffer);
-        imported.push({ id: uid(), name: file.name, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, buffer, audioData, bpm: detectedBpm });
+        try {
+          const audioData = await file.arrayBuffer();
+          const buffer = await context.decodeAudioData(audioData.slice(0));
+          const detectedBpm = detectBpm(buffer);
+          imported.push({ id: uid(), name: file.name, duration: buffer.duration, sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, buffer, audioData, bpm: detectedBpm });
+        } catch (error) {
+          console.error("Audio file import failed", file.name, error);
+          failedFiles++;
+        }
       }
-      if (!imported.length) setStatus("No supported audio files found. Choose WAV, MP3 or OGG.");
-      else {
-        setAssets((current) => [...current, ...imported]);
-        setStatus(`Imported ${imported.length} file${imported.length === 1 ? "" : "s"}. Add clips to tracks below.`);
-      }
+      if (imported.length) setAssets((current) => [...current, ...imported]);
+      if (imported.length && failedFiles) setStatus(`Imported ${imported.length} file(s); ${failedFiles} file(s) could not be decoded.`);
+      else if (imported.length) setStatus(`Imported ${imported.length} file${imported.length === 1 ? "" : "s"}. Add clips to tracks below.`);
+      else setStatus(failedFiles ? "Could not decode audio. Try a shorter or smaller MP3/OGG file, or close other tabs and reload the app." : "No supported audio files found. Choose WAV, MP3 or OGG.");
     } catch (error) {
       console.error(error);
       setStatus("Could not decode this file. Try another WAV, MP3 or OGG file.");
