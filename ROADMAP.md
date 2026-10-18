@@ -3,7 +3,7 @@
 > Living checklist for the mobile-first audio workstation. Update this file whenever a milestone lands.
 >
 > **Current milestone:** Phase 6 — Mixing foundation  
-> **Last updated:** 2026-10-16
+> **Last updated:** 2026-10-18
 
 ## Status legend
 
@@ -76,10 +76,9 @@
 
 - [x] Establish a track-to-master audio graph
 - [x] Add master volume and live output level meter
-- [ ] Add a basic volume effect
-- [ ] Add EQ and reverb as first built-in effects
+- [x] Add insertable Volume, EQ and Reverb effects with touch-friendly module buttons and settings panel
 - [ ] Design send/return routing for future effects
-- [ ] Save effect settings in the project format
+- [x] Save effect settings in the project format through track state and IndexedDB autosave
 
 ## Phase 7 — Export
 
