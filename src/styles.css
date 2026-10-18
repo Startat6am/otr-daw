@@ -344,7 +344,7 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   top: 0;
   display: grid;
   place-items: center;
-  width: 24px;
+  width: 27px;
   height: 28px;
   padding: 0;
   border: 1px solid #3d5147;
@@ -359,7 +359,7 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 .sidebar-expanded .ruler,
 .sidebar-expanded .timeline-track { margin-left: 104px; }
 .sidebar-collapsed .ruler,
-.sidebar-collapsed .timeline-track { margin-left: 24px; }
+.sidebar-collapsed .timeline-track { margin-left: 27px; }
 .sidebar-expanded .track-label {
   position: absolute;
   left: -104px;
@@ -372,9 +372,9 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 }
 .sidebar-collapsed .track-label {
   position: absolute;
-  left: -24px;
+  left: -27px;
   top: 0;
-  width: 24px;
+  width: 27px;
   min-height: 100%;
   box-sizing: border-box;
   padding: 6px 2px;
@@ -435,7 +435,7 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .bpm-control > button { width: 27px; min-width: 27px; }
   .bpm-wheel { width: 48px; }
   .bpm-control input { width: 48px; min-width: 48px; padding: 6px 4px; }
-  .sidebar-toggle { width: 24px; }
+  .sidebar-toggle { width: 27px; }
 }
 
 
