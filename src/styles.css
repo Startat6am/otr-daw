@@ -1137,3 +1137,20 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 /* Mixer channel controls read vertically: volume, MUTE, then SOLO. */
 .channel-buttons { flex-direction: column; gap: 5px; margin-top: 9px; }
 .channel-buttons button { flex: 0 0 auto; width: 100%; min-height: 28px; }
+
+
+/* Vertical faders in mixer strips, with compact portrait channel blocks. */
+.mixer-channel { flex-basis: 136px; width: 136px; min-width: 136px; padding: 10px 9px; }
+.mixer-channels .master-channel { flex-basis: 136px; width: 136px; min-width: 136px; }
+.volume-control { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; min-height: 132px; }
+.volume-control > span { align-self: center; }
+.volume-control input[type="range"] { writing-mode: vertical-lr; direction: rtl; appearance: slider-vertical; -webkit-appearance: slider-vertical; width: 22px; min-width: 22px; height: 88px; min-height: 88px; margin: 2px 0; padding: 0; accent-color: var(--mint); touch-action: pan-y; }
+.volume-control output { text-align: center; }
+.channel-buttons { margin-top: 7px; }
+.channel-buttons button { min-height: 26px; }
+.master-channel .master-meter { margin-top: 6px; }
+@media (max-width: 520px) {
+  .mixer-channel, .mixer-channels .master-channel { flex-basis: 124px; width: 124px; min-width: 124px; }
+  .volume-control { min-height: 126px; }
+  .volume-control input[type="range"] { height: 82px; min-height: 82px; }
+}
