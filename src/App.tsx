@@ -92,12 +92,13 @@ function cacheAudioBuffer(cache: Map<string, AudioBuffer>, key: string, buffer: 
   return buffer;
 }
 
-function Waveform({ buffer, peaks, duration, sourceStart = 0, sourceEnd }: { buffer?: AudioBuffer; peaks?: number[]; duration?: number; sourceStart?: number; sourceEnd?: number }) {
+function Waveform({ buffer, peaks, duration, sourceStart = 0, sourceEnd, detailed = false }: { buffer?: AudioBuffer; peaks?: number[]; duration?: number; sourceStart?: number; sourceEnd?: number; detailed?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || (!buffer && !peaks?.length)) return;
     const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     canvas.width = Math.max(1, Math.floor(rect.width * dpr));
     canvas.height = Math.max(1, Math.floor(rect.height * dpr));
@@ -129,23 +130,38 @@ function Waveform({ buffer, peaks, duration, sourceStart = 0, sourceEnd }: { buf
         ctx.lineTo(x + .5, middle - min * rect.height * .43);
       }
     } else if (peaks?.length) {
+      const pairedEnvelope = detailed && peaks.length >= 12000 && peaks.length % 2 === 0;
+      const bucketCount = pairedEnvelope ? peaks.length / 2 : peaks.length;
       const totalDuration = Math.max(.001, duration ?? sourceEnd ?? 1);
-      const start = Math.max(0, Math.min(peaks.length - 1, Math.floor(sourceStart / totalDuration * peaks.length)));
-      const end = Math.max(start + 1, Math.min(peaks.length, Math.ceil((sourceEnd ?? totalDuration) / totalDuration * peaks.length)));
+      const rangeStart = Math.max(0, Math.min(bucketCount - 1, Math.floor(sourceStart / totalDuration * bucketCount)));
+      const rangeEnd = Math.max(rangeStart + 1, Math.min(bucketCount, Math.ceil((sourceEnd ?? totalDuration) / totalDuration * bucketCount)));
       for (let x = 0; x < rect.width; x++) {
-        const index = Math.min(peaks.length - 1, Math.floor(start + x / Math.max(1, rect.width) * (end - start)));
-        const amplitude = Math.max(.025, Math.min(1, peaks[index] ?? 0));
-        ctx.moveTo(x + .5, middle - amplitude * rect.height * .43);
-        ctx.lineTo(x + .5, middle + amplitude * rect.height * .43);
+        const first = Math.min(bucketCount - 1, rangeStart + Math.floor(x / Math.max(1, rect.width) * (rangeEnd - rangeStart)));
+        const after = Math.min(bucketCount, Math.max(first + 1, rangeStart + Math.ceil((x + 1) / Math.max(1, rect.width) * (rangeEnd - rangeStart))));
+        if (pairedEnvelope) {
+          let min = 1, max = -1;
+          for (let bucket = first; bucket < after; bucket++) {
+            min = Math.min(min, peaks[bucket * 2] ?? 0);
+            max = Math.max(max, peaks[bucket * 2 + 1] ?? 0);
+          }
+          ctx.moveTo(x + .5, middle - max * rect.height * .43);
+          ctx.lineTo(x + .5, middle - min * rect.height * .43);
+        } else {
+          let amplitude = 0;
+          for (let bucket = first; bucket < after; bucket++) amplitude = Math.max(amplitude, peaks[bucket] ?? 0);
+          amplitude = Math.max(.025, Math.min(1, amplitude));
+          ctx.moveTo(x + .5, middle - amplitude * rect.height * .43);
+          ctx.lineTo(x + .5, middle + amplitude * rect.height * .43);
+        }
       }
     }
     ctx.stroke();
-  }, [buffer, peaks, sourceStart, sourceEnd]);
-  return <canvas ref={canvasRef} className="waveform" aria-label="Audio waveform" />;
+  }, [buffer, peaks, duration, sourceStart, sourceEnd, detailed]);
+  return <canvas ref={canvasRef} className="waveform" aria-label={detailed ? "Detailed audio waveform" : "Audio waveform"} />;
 }
 
-function ClipWaveform({ buffer, peaks, duration, sourceStart, sourceEnd }: { buffer?: AudioBuffer; peaks?: number[]; duration: number; sourceStart: number; sourceEnd: number }) {
-  return <Waveform buffer={buffer} peaks={peaks} duration={duration} sourceStart={sourceStart} sourceEnd={sourceEnd} />;
+function ClipWaveform({ buffer, peaks, duration, sourceStart, sourceEnd, detailed }: { buffer?: AudioBuffer; peaks?: number[]; duration: number; sourceStart: number; sourceEnd: number; detailed?: boolean }) {
+  return <Waveform buffer={buffer} peaks={peaks} duration={duration} sourceStart={sourceStart} sourceEnd={sourceEnd} detailed={detailed} />;
 }
 
 export default function App() {
@@ -744,7 +760,7 @@ export default function App() {
     const assetIds = [...new Set(track.clips.map((clip) => clip.assetId))];
     const missing = assetIds.filter((id) => {
       const asset = assets.find((item) => item.id === id);
-      return Boolean(asset && !asset.waveformPeaksDetailed?.length);
+      return Boolean(asset && (asset.waveformPeaksDetailed?.length ?? 0) < 12000);
     });
     if (missing.length) {
       setStatus(`Building detailed waveform for ${track.name}…`);
@@ -755,7 +771,7 @@ export default function App() {
           const asset = assets.find((item) => item.id === assetId);
           if (!asset) continue;
           const decoded = await getDecodedAsset(asset, context);
-          const waveformPeaksDetailed = peaksFromBuffer(decoded, 6000);
+          const waveformPeaksDetailed = peaksFromBuffer(decoded, 6000, true);
           setAssets((current) => current.map((item) => item.id === assetId ? { ...item, waveformPeaksDetailed } : item));
         }
         setStatus(`Detailed waveform ready for ${track.name}.`);
@@ -815,17 +831,31 @@ export default function App() {
     setStatus(`Added ${asset.name} to ${tracks.find((track) => track.id === trackId)?.name}.`);
   }
 
-  function peaksFromBuffer(decoded: AudioBuffer, bucketCount = 1200) {
-    const peaks = new Array<number>(bucketCount).fill(0);
+  function peaksFromBuffer(decoded: AudioBuffer, bucketCount = 1200, preserveShape = false) {
+    // Standard mode stays compact. Detailed mode stores a true min/max envelope
+    // for each bucket so quiet/negative transients are not lost.
+    const peaks = new Array<number>(bucketCount * (preserveShape ? 2 : 1)).fill(0);
     for (let bucket = 0; bucket < bucketCount; bucket++) {
       const start = Math.floor(bucket * decoded.length / bucketCount);
       const end = Math.max(start + 1, Math.floor((bucket + 1) * decoded.length / bucketCount));
       let peak = 0;
+      let min = 1;
+      let max = -1;
       for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
         const samples = decoded.getChannelData(channel);
-        for (let i = start; i < Math.min(end, samples.length); i++) peak = Math.max(peak, Math.abs(samples[i]));
+        for (let i = start; i < Math.min(end, samples.length); i++) {
+          const sample = samples[i];
+          peak = Math.max(peak, Math.abs(sample));
+          min = Math.min(min, sample);
+          max = Math.max(max, sample);
+        }
       }
-      peaks[bucket] = peak;
+      if (preserveShape) {
+        peaks[bucket * 2] = min;
+        peaks[bucket * 2 + 1] = max;
+      } else {
+        peaks[bucket] = peak;
+      }
     }
     return peaks;
   }
@@ -1143,7 +1173,7 @@ export default function App() {
               {Array.from({ length: rulerCount + 1 }, (_, i) => <div className="ruler-mark" key={i} style={{ left: i * BEAT * 4 * PX_PER_SECOND }}><span>{String(i + 1).padStart(2, "0")}</span></div>)}
             </div>
             {tracks.map((track) => <div className="timeline-track" data-track-id={track.id} key={track.id} style={{ width: timelineWidth, backgroundImage: `repeating-linear-gradient(to right, #252a28 0, #252a28 1px, transparent 1px, transparent ${Math.max(1, BEAT * 4 / gridDivision * PX_PER_SECOND)}px)` }}>
-              <div className="track-label"><span title={track.name}>{trackSidebarCollapsed ? String(tracks.findIndex((item) => item.id === track.id) + 1).padStart(2, "0") : track.name}</span>{!trackSidebarCollapsed && <><div className="track-mini-controls"><div className="track-knob-wrap"><div className="track-knob pan-knob" role="slider" tabIndex={0} aria-label={track.name + " pan"} aria-valuemin={-100} aria-valuemax={100} aria-valuenow={Math.round((track.pan ?? 0) * 100)} title={`PAN ${Math.round((track.pan ?? 0) * 100)}`} style={{ "--knob-angle": `${(track.pan ?? 0) * 135}deg` } as React.CSSProperties} onPointerDown={(event) => startTrackKnob(event, track.id, "pan", track.pan ?? 0)} onPointerMove={moveTrackKnob} onPointerUp={endTrackKnob} onPointerCancel={endTrackKnob} onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowDown") { event.preventDefault(); changeTrack(track.id, { pan: Math.max(-1, (track.pan ?? 0) - .05) }); } else if (event.key === "ArrowRight" || event.key === "ArrowUp") { event.preventDefault(); changeTrack(track.id, { pan: Math.min(1, (track.pan ?? 0) + .05) }); } }}><span /></div><small>PAN</small></div><div className="track-knob-wrap"><div className="track-knob volume-knob" role="slider" tabIndex={0} aria-label={track.name + " volume"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(track.gain * 100)} title={`VOL ${Math.round(track.gain * 100)}%`} style={{ "--knob-angle": `${-135 + track.gain * 270}deg` } as React.CSSProperties} onPointerDown={(event) => startTrackKnob(event, track.id, "gain", track.gain)} onPointerMove={moveTrackKnob} onPointerUp={endTrackKnob} onPointerCancel={endTrackKnob} onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); changeTrack(track.id, { gain: Math.max(0, track.gain - .05) }); } else if (event.key === "ArrowUp" || event.key === "ArrowRight") { event.preventDefault(); changeTrack(track.id, { gain: Math.min(1, track.gain + .05) }); } }}><span /></div><small>VOL</small></div></div><button className={`waveform-detail-toggle${track.waveformDetail ? " is-active" : ""}`} type="button" aria-pressed={Boolean(track.waveformDetail)} title={track.clips.length === 0 ? "Add a clip to enable detailed waveform" : track.waveformDetail ? "Use standard waveform detail" : "Improve waveform detail"} disabled={track.clips.length === 0} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void toggleTrackWaveformDetail(track.id); }}>{track.waveformDetail ? "WAVE HD ON" : "WAVE HD"}</button></>}<div className="track-label-actions"><button type="button" title={"Rename " + track.name} aria-label={"Rename " + track.name} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); renameTrack(track.id); }}>✎</button><button type="button" title={"Delete " + track.name} aria-label={"Delete " + track.name} disabled={tracks.length <= 1} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); removeTrack(track.id); }}>×</button></div></div>
+              <div className="track-label"><span title={track.name}>{trackSidebarCollapsed ? String(tracks.findIndex((item) => item.id === track.id) + 1).padStart(2, "0") : track.name}</span>{!trackSidebarCollapsed && <><div className="track-mini-controls"><div className="track-knob-wrap"><div className="track-knob pan-knob" role="slider" tabIndex={0} aria-label={track.name + " pan"} aria-valuemin={-100} aria-valuemax={100} aria-valuenow={Math.round((track.pan ?? 0) * 100)} title={`PAN ${Math.round((track.pan ?? 0) * 100)}`} style={{ "--knob-angle": `${(track.pan ?? 0) * 135}deg` } as React.CSSProperties} onPointerDown={(event) => startTrackKnob(event, track.id, "pan", track.pan ?? 0)} onPointerMove={moveTrackKnob} onPointerUp={endTrackKnob} onPointerCancel={endTrackKnob} onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowDown") { event.preventDefault(); changeTrack(track.id, { pan: Math.max(-1, (track.pan ?? 0) - .05) }); } else if (event.key === "ArrowRight" || event.key === "ArrowUp") { event.preventDefault(); changeTrack(track.id, { pan: Math.min(1, (track.pan ?? 0) + .05) }); } }}><span /></div><small>PAN</small></div><div className="track-knob-wrap"><div className="track-knob volume-knob" role="slider" tabIndex={0} aria-label={track.name + " volume"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(track.gain * 100)} title={`VOL ${Math.round(track.gain * 100)}%`} style={{ "--knob-angle": `${-135 + track.gain * 270}deg` } as React.CSSProperties} onPointerDown={(event) => startTrackKnob(event, track.id, "gain", track.gain)} onPointerMove={moveTrackKnob} onPointerUp={endTrackKnob} onPointerCancel={endTrackKnob} onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); changeTrack(track.id, { gain: Math.max(0, track.gain - .05) }); } else if (event.key === "ArrowUp" || event.key === "ArrowRight") { event.preventDefault(); changeTrack(track.id, { gain: Math.min(1, track.gain + .05) }); } }}><span /></div><small>VOL</small></div></div><button className={`waveform-detail-toggle${track.waveformDetail ? " is-active" : ""}`} type="button" aria-pressed={Boolean(track.waveformDetail)} title={track.clips.length === 0 ? "Add a clip to enable detailed waveform" : track.waveformDetail ? "Use standard waveform detail" : "Improve waveform detail"} disabled={track.clips.length === 0} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void toggleTrackWaveformDetail(track.id); }}>{track.waveformDetail ? "DETAIL ON" : "WAVE DETAIL"}</button></>}<div className="track-label-actions"><button type="button" title={"Rename " + track.name} aria-label={"Rename " + track.name} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); renameTrack(track.id); }}>✎</button><button type="button" title={"Delete " + track.name} aria-label={"Delete " + track.name} disabled={tracks.length <= 1} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); removeTrack(track.id); }}>×</button></div></div>
               {track.clips.map((clip) => {
                 const asset = assets.find((item) => item.id === clip.assetId);
                 if (!asset) return null;
@@ -1230,7 +1260,7 @@ export default function App() {
                     <span className="fade-handle fade-out-handle" data-fade="fadeOut" style={{ right: `${Math.min(100, Math.max(0, (clip.fadeOut ?? 0) / duration * 100))}%` }} title="Drag to adjust Fade Out" aria-label="Adjust fade out" />
                   </>}
                   <span className={"trim-handle trim-left " + (trimMode ? "trim-enabled" : "trim-disabled")} data-edge="left" aria-label={trimMode ? "Trim clip start" : "Move clip from start edge"} />
-                  <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={asset.buffer ?? decodedAssetsRef.current.get(asset.id)} peaks={track.waveformDetail ? (asset.waveformPeaksDetailed ?? asset.waveformPeaks) : asset.waveformPeaks} duration={asset.duration} sourceStart={clip.sourceStart} sourceEnd={clip.sourceEnd} /></div>
+                  <strong>{asset.name}</strong><div className="clip-wave"><ClipWaveform buffer={track.waveformDetail ? undefined : (asset.buffer ?? decodedAssetsRef.current.get(asset.id))} peaks={track.waveformDetail ? (asset.waveformPeaksDetailed ?? asset.waveformPeaks) : asset.waveformPeaks} duration={asset.duration} sourceStart={clip.sourceStart} sourceEnd={clip.sourceEnd} detailed={track.waveformDetail} /></div>
                   <span className={"trim-handle trim-right " + (trimMode ? "trim-enabled" : "trim-disabled")} data-edge="right" aria-label={trimMode ? "Trim clip end" : "Move clip from end edge"} />
                   {selectedClip === clip.id && <div className="clip-nudges"><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, -1); }}>− grid</button><button onClick={(event) => { event.stopPropagation(); nudgeClip(clip, 1); }}>+ grid</button></div>}
                 </div>;
