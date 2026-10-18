@@ -4,7 +4,7 @@ export type SavedAsset = {
   duration: number;
   sampleRate: number;
   channels: number;
-  audioData: ArrayBuffer;
+  audioData: ArrayBuffer | Blob;
   bpm?: number;
 };
 
