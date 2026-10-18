@@ -387,7 +387,7 @@ export default function App() {
   }
 
   function getContext() {
-    if (!contextRef.current) contextRef.current = new AudioContext();
+    if (!contextRef.current) contextRef.current = new AudioContext({ sampleRate: 44100 });
     return contextRef.current;
   }
   function ensureMixer(context: AudioContext, currentTracks: Track[]) {
