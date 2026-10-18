@@ -85,8 +85,36 @@ export async function saveProject(project: SavedProject): Promise<void> {
         ...project,
         assets: project.assets.map(({ audioData: _audioData, ...asset }) => asset),
       };
-      for (const asset of project.assets) assetStore.put(asset.audioData, asset.id);
-      projectStore.put(metadata, CURRENT_PROJECT_KEY);
+      // Avoid rewriting every existing audio blob on every autosave. Repeatedly
+      // writing multi-megabyte assets can cause unnecessary memory spikes on mobile.
+      let pendingChecks = project.assets.length;
+      const finishChecks = () => {
+        pendingChecks -= 1;
+        if (pendingChecks === 0) projectStore.put(metadata, CURRENT_PROJECT_KEY);
+      };
+      if (project.assets.length === 0) {
+        projectStore.put(metadata, CURRENT_PROJECT_KEY);
+      } else {
+        for (const asset of project.assets) {
+          const check = assetStore.get(asset.id);
+          check.onsuccess = () => {
+            const existing = check.result as Blob | ArrayBuffer | undefined;
+            const next = asset.audioData;
+            const sameSize = existing instanceof Blob
+              ? existing.size === (next instanceof Blob ? next.size : next.byteLength)
+              : existing instanceof ArrayBuffer
+                ? existing.byteLength === (next instanceof Blob ? next.size : next.byteLength)
+                : false;
+            const sameType = !(existing instanceof Blob) || !(next instanceof Blob) || existing.type === next.type;
+            if (!sameSize || !sameType) assetStore.put(next, asset.id);
+            finishChecks();
+          };
+          check.onerror = () => {
+            assetStore.put(asset.audioData, asset.id);
+            finishChecks();
+          };
+        }
+      }
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error ?? new Error("Could not save project"));
       transaction.onabort = () => reject(transaction.error ?? new Error("Project save was aborted"));
