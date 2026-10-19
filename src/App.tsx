@@ -16,7 +16,7 @@ type ImportedAudio = {
 };
 type Clip = { id: string; assetId: string; start: number; sourceStart: number; sourceEnd: number; tempoBpm?: number; fadeIn?: number; fadeOut?: number };
 type EffectType = "volume" | "eq" | "reverb";
-type TrackEffect = { id: string; type: EffectType; enabled: boolean; amount: number; frequency: number; q: number };
+type TrackEffect = { id: string; type: EffectType; enabled: boolean; amount: number; frequency: number; q: number; roomSize?: number };
 type Track = { id: string; name: string; clips: Clip[]; gain: number; pan?: number; muted: boolean; solo: boolean; waveformDetail?: boolean; effects?: TrackEffect[] };
 const DEFAULT_BPM = 120;
 const MIN_BPM = 40;
@@ -205,7 +205,7 @@ export default function App() {
   const timelinePanRef = useRef<{ pointerId: number; startX: number; startScrollLeft: number } | null>(null);
   const [masterGain, setMasterGain] = useState(0.85);
   const [effectMenuTrack, setEffectMenuTrack] = useState<string | null>(null);
-  const [selectedEffect, setSelectedEffect] = useState<{ trackId: string; effectId: string } | null>(null);
+  const [selectedEffect, setSelectedEffect] = useState<{ trackId: string; effectId: string } | null>(null);\n  const [effectEditorCollapsed, setEffectEditorCollapsed] = useState(false);
   const [masterLevel, setMasterLevel] = useState(0);
   const masterGainRef = useRef(0.85);
   const mixerNodesRef = useRef<Map<string, GainNode>>(new Map());
@@ -462,17 +462,17 @@ export default function App() {
       }
       const effects = (track.effects ?? []).filter((effect) => effect.enabled);
       const previous = effectNodesRef.current.get(track.id);
-      if (!previous || previous.nodes.some((item) => item.context !== context) || previous.nodes.length !== effects.length || previous.type !== effects.map((effect) => effect.type).join(",")) {
+      if (!previous || previous.nodes.some((item) => item.context !== context) || previous.nodes.length !== effects.length || previous.type !== effects.map((effect) => `${effect.type}:${effect.type === "reverb" ? effect.roomSize ?? 0.55 : ""}`).join(",")) {
         previous?.nodes.forEach((item) => { try { item.disconnect(); } catch { /* already disconnected */ } });
         const nodes: AudioNode[] = effects.map((effect) => {
           if (effect.type === "volume") return context.createGain();
           if (effect.type === "eq") return context.createBiquadFilter();
           const convolver = context.createConvolver();
-          const impulseLength = Math.floor(context.sampleRate * 1.15);
+          const roomSize = Math.max(0.15, Math.min(1, effect.roomSize ?? 0.55));\n          const impulseLength = Math.floor(context.sampleRate * (0.25 + roomSize * 1.75));
           const impulse = context.createBuffer(2, impulseLength, context.sampleRate);
           for (let channel = 0; channel < 2; channel++) {
             const data = impulse.getChannelData(channel);
-            for (let i = 0; i < impulseLength; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / impulseLength, 2.8);
+            for (let i = 0; i < impulseLength; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / impulseLength, 1.5 + (1 - roomSize) * 3);
           }
           convolver.buffer = impulse;
           return convolver;
@@ -514,7 +514,7 @@ export default function App() {
     });
   }
   function addEffect(trackId: string, type: EffectType) {
-    const effect: TrackEffect = { id: uid(), type, enabled: true, amount: type === "volume" ? 1 : type === "eq" ? 0 : 0.35, frequency: 1200, q: 1 };
+    const effect: TrackEffect = { id: uid(), type, enabled: true, amount: type === "volume" ? 1 : type === "eq" ? 0 : 0.35, frequency: 1200, q: 1, roomSize: 0.55 };
     const next = tracksRef.current.map((track) => track.id === trackId ? { ...track, effects: [...(track.effects ?? []), effect] } : track);
     tracksRef.current = next;
     setTracks(next);
@@ -1164,12 +1164,12 @@ export default function App() {
       <section className="mixer-panel" aria-label="Audio mixer">
         <div className="section-heading mixer-heading"><div><p className="eyebrow">LEVELS & CONTROL</p><h2>Mixer <span className="count">{tracks.length} tracks</span></h2></div><div className="mixer-heading-actions"><div className="master-meter" aria-label={`Master signal ${Math.round(masterLevel * 100)} percent`}><span style={{ width: `${Math.round(masterLevel * 100)}%` }} /></div><button className="collapse-button" aria-expanded={!mixerCollapsed} onClick={() => setMixerCollapsed((value) => !value)}>{mixerCollapsed ? "＋ Expand" : "− Collapse"}</button></div></div>
         {!mixerCollapsed && <div className="mixer-channels">
-          {tracks.map((track, index) => <article className={`mixer-channel ${track.muted ? "channel-muted" : ""} ${track.solo ? "channel-solo" : ""}`} key={track.id}>
+\n          {tracks.map((track, index) => <article className={`mixer-channel ${track.muted ? "channel-muted" : ""} ${track.solo ? "channel-solo" : ""}`} key={track.id}>
             <div className="channel-top"><span className="channel-index">{String(index + 1).padStart(2, "0")}</span><strong>{track.name}</strong><span className="channel-db">{track.gain === 0 ? "−∞" : `${(20 * Math.log10(track.gain)).toFixed(1)} dB`}</span></div>
             <label className="volume-control"><span>VOL</span><input aria-label={`${track.name} volume`} type="range" min="0" max="1" step="0.01" value={track.gain} onChange={(event) => changeTrack(track.id, { gain: Number(event.currentTarget.value) })} /><output>{Math.round(track.gain * 100)}%</output></label>
             <div className="channel-buttons"><button className={track.muted ? "channel-active" : ""} aria-pressed={track.muted} onClick={() => changeTrack(track.id, { muted: !track.muted })}>MUTE</button><button className={track.solo ? "channel-active solo-active" : ""} aria-pressed={track.solo} onClick={() => changeTrack(track.id, { solo: !track.solo })}>SOLO</button></div>
             <div className="channel-effects">
-              <div className="effect-list">{(track.effects ?? []).map((effect) => <button key={effect.id} className={`effect-module ${selectedEffect?.effectId === effect.id ? "effect-module-selected" : ""} ${effect.enabled ? "" : "effect-module-bypassed"}`} onClick={() => { setSelectedEffect({ trackId: track.id, effectId: effect.id }); setEffectMenuTrack(null); }}><span className="effect-module-led" /><span>{effect.type === "eq" ? "EQ" : effect.type === "reverb" ? "REVERB" : "VOLUME"}</span><small>{effect.enabled ? "ON" : "BYPASS"}</small></button>)}</div>
+              <div className="effect-list">{(track.effects ?? []).map((effect) => <div key={effect.id} className={`effect-module ${selectedEffect?.effectId === effect.id ? "effect-module-selected" : ""} ${effect.enabled ? "" : "effect-module-bypassed"}`}><button type="button" className={`effect-module-led ${effect.enabled ? "is-on" : ""}`} aria-label={`${effect.enabled ? "Disable" : "Enable"} ${effect.type}`} aria-pressed={effect.enabled} onClick={() => updateEffect(track.id, effect.id, { enabled: !effect.enabled })} /><button type="button" className="effect-module-open" onClick={() => { setSelectedEffect({ trackId: track.id, effectId: effect.id }); setEffectEditorCollapsed(false); setEffectMenuTrack(null); }}><span>{effect.type === "eq" ? "EQ" : effect.type === "reverb" ? "REVERB" : "VOLUME"}</span><small>{effect.enabled ? "ON" : "BYPASS"}</small></button></div>)}</div>
               <button className="add-effect-button" onClick={() => setEffectMenuTrack((current) => current === track.id ? null : track.id)}>＋ ADD EFFECT</button>
               {effectMenuTrack === track.id && <div className="effect-picker"><strong>Add effect</strong><button onClick={() => addEffect(track.id, "volume")}>Volume <small>Level / boost</small></button><button onClick={() => addEffect(track.id, "eq")}>EQ <small>Tone shaping</small></button><button onClick={() => addEffect(track.id, "reverb")}>Reverb <small>Space / ambience</small></button></div>}
             </div>
@@ -1182,16 +1182,16 @@ export default function App() {
         const track = tracks.find((item) => item.id === selectedEffect.trackId);
         const effect = track?.effects?.find((item) => item.id === selectedEffect.effectId);
         if (!track || !effect) return null;
-        return <div className="effect-editor-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setSelectedEffect(null); }}>
-          <section className="effect-editor" role="dialog" aria-modal="true" aria-label={`${effect.type} effect settings`}>
-            <div className="effect-editor-header"><div><p className="eyebrow">TRACK EFFECT · {track.name.toUpperCase()}</p><h2>{effect.type === "eq" ? "EQ" : effect.type === "reverb" ? "Reverb" : "Volume"}</h2></div><button className="effect-close" onClick={() => setSelectedEffect(null)} aria-label="Close effect settings">×</button></div>
+        return <section className={`effect-editor effect-editor-floating ${effectEditorCollapsed ? "is-collapsed" : ""}`} role="dialog" aria-label={`${effect.type} effect settings`}>
+          <div className="effect-editor-header"><div><p className="eyebrow">TRACK EFFECT · {track.name.toUpperCase()}</p><h2>{effect.type === "eq" ? "EQ" : effect.type === "reverb" ? "Reverb" : "Volume"}</h2></div><div className="effect-window-actions"><button className="effect-window-collapse" onClick={() => setEffectEditorCollapsed((value) => !value)} aria-label={effectEditorCollapsed ? "Expand effect settings" : "Collapse effect settings"}>{effectEditorCollapsed ? "＋" : "−"}</button><button className="effect-close" onClick={() => setSelectedEffect(null)} aria-label="Close effect settings">×</button></div></div>
+          {!effectEditorCollapsed && <>
             <label className="effect-enable"><span>Effect enabled</span><input type="checkbox" checked={effect.enabled} onChange={(event) => updateEffect(track.id, effect.id, { enabled: event.currentTarget.checked })}/></label>
             {effect.type === "volume" && <label className="effect-param"><span>Output level <b>{Math.round(effect.amount * 100)}%</b></span><input type="range" min="0" max="2" step="0.01" value={effect.amount} onChange={(event) => updateEffect(track.id, effect.id, { amount: Number(event.currentTarget.value) })}/></label>}
             {effect.type === "eq" && <><label className="effect-param"><span>Frequency <b>{Math.round(effect.frequency)} Hz</b></span><input type="range" min="60" max="16000" step="10" value={effect.frequency} onChange={(event) => updateEffect(track.id, effect.id, { frequency: Number(event.currentTarget.value) })}/></label><label className="effect-param"><span>Gain <b>{effect.amount > 0 ? "+" : ""}{effect.amount.toFixed(1)} dB</b></span><input type="range" min="-12" max="12" step="0.5" value={effect.amount} onChange={(event) => updateEffect(track.id, effect.id, { amount: Number(event.currentTarget.value) })}/></label><label className="effect-param"><span>Q / width <b>{effect.q.toFixed(1)}</b></span><input type="range" min="0.1" max="10" step="0.1" value={effect.q} onChange={(event) => updateEffect(track.id, effect.id, { q: Number(event.currentTarget.value) })}/></label></>}
-            {effect.type === "reverb" && <div className="effect-info"><strong>Room ambience</strong><p>Adds a short, natural-sounding reverb tail. This first version uses a fixed room impulse.</p></div>}
+            {effect.type === "reverb" && <><label className="effect-param"><span>Room size <b>{Math.round((effect.roomSize ?? 0.55) * 100)}%</b></span><input type="range" min="0.15" max="1" step="0.05" value={effect.roomSize ?? 0.55} onChange={(event) => updateEffect(track.id, effect.id, { roomSize: Number(event.currentTarget.value) })}/></label><label className="effect-param"><span>Reverb level <b>{Math.round(effect.amount * 100)}%</b></span><input type="range" min="0" max="1" step="0.01" value={effect.amount} onChange={(event) => updateEffect(track.id, effect.id, { amount: Number(event.currentTarget.value) })}/></label><div className="effect-info"><strong>Room ambience</strong><p>Adjust the room tail and reverb level. Larger rooms create a longer, more spacious decay.</p></div></>}
             <div className="effect-editor-actions"><button className="effect-remove" onClick={() => removeEffect(track.id, effect.id)}>Remove effect</button><button className="effect-done" onClick={() => setSelectedEffect(null)}>Done</button></div>
-          </section>
-        </div>;
+          </>}
+        </section>;
       })()}
       <section className="timeline-panel" aria-label="Multitrack timeline">
         <div className="timeline-heading">
