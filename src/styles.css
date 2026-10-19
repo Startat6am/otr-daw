@@ -1482,3 +1482,26 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
     padding: 7px 8px;
   }
 }
+
+/* Consistent compact spacing for every floating editor window. */
+.clip-inspector:not(.clip-inspector-collapsed) {
+  padding: 8px;
+}
+.clip-inspector-header {
+  padding-right: 0;
+}
+.clip-inspector:not(.clip-inspector-collapsed) .clip-inspector-header {
+  flex: 0 0 100%;
+}
+.clip-inspector-collapsed {
+  padding: 5px 6px;
+}
+.clip-inspector-header .clip-inspector-close,
+.clip-inspector-collapse {
+  flex-shrink: 0;
+}
+@media (max-width: 520px) {
+  .clip-inspector:not(.clip-inspector-collapsed) {
+    padding: 7px;
+  }
+}
