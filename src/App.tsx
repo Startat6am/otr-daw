@@ -207,6 +207,8 @@ export default function App() {
   const [effectMenuTrack, setEffectMenuTrack] = useState<string | null>(null);
   const [selectedEffect, setSelectedEffect] = useState<{ trackId: string; effectId: string } | null>(null);
   const [effectEditorCollapsed, setEffectEditorCollapsed] = useState(false);
+  const [effectEditorPosition, setEffectEditorPosition] = useState<{ x: number; y: number } | null>(null);
+  const effectEditorDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const [masterLevel, setMasterLevel] = useState(0);
   const masterGainRef = useRef(0.85);
   const mixerNodesRef = useRef<Map<string, GainNode>>(new Map());
@@ -1186,8 +1188,23 @@ export default function App() {
         const track = tracks.find((item) => item.id === selectedEffect.trackId);
         const effect = track?.effects?.find((item) => item.id === selectedEffect.effectId);
         if (!track || !effect) return null;
-        return <section className={`effect-editor effect-editor-floating ${effectEditorCollapsed ? "is-collapsed" : ""}`} role="dialog" aria-label={`${effect.type} effect settings`}>
-          <div className="effect-editor-header"><div className="effect-editor-title"><strong>{track.name}</strong><span>{effect.type === "eq" ? "EQ" : effect.type === "reverb" ? "Reverb" : "Volume"}</span></div><div className="effect-window-actions"><button className="effect-window-collapse" onClick={() => setEffectEditorCollapsed((value) => !value)} aria-label={effectEditorCollapsed ? "Expand effect settings" : "Collapse effect settings"}>{effectEditorCollapsed ? "＋" : "−"}</button><button className="effect-close" onClick={() => setSelectedEffect(null)} aria-label="Close effect settings">×</button></div></div>
+        return <section className={`effect-editor effect-editor-floating ${effectEditorCollapsed ? "is-collapsed" : ""}`} role="dialog" aria-label={`${effect.type} effect settings`} style={effectEditorPosition ? { left: effectEditorPosition.x, top: effectEditorPosition.y, right: "auto", bottom: "auto" } : undefined}>
+          <div className="effect-editor-header" onPointerDown={(event) => {
+            if ((event.target as HTMLElement).closest("button")) return;
+            const panel = event.currentTarget.parentElement;
+            if (!panel) return;
+            const rect = panel.getBoundingClientRect();
+            effectEditorDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: rect.left, originY: rect.top };
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }} onPointerMove={(event) => {
+            const drag = effectEditorDragRef.current;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            const panel = event.currentTarget.parentElement;
+            if (!panel) return;
+            const maxX = Math.max(0, window.innerWidth - panel.offsetWidth);
+            const maxY = Math.max(0, window.innerHeight - Math.min(panel.offsetHeight, 34));
+            setEffectEditorPosition({ x: Math.max(0, Math.min(maxX, drag.originX + event.clientX - drag.startX)), y: Math.max(0, Math.min(maxY, drag.originY + event.clientY - drag.startY)) });
+          }} onPointerUp={(event) => { if (effectEditorDragRef.current?.pointerId === event.pointerId) effectEditorDragRef.current = null; }} onPointerCancel={() => { effectEditorDragRef.current = null; }}><div className="effect-editor-title"><strong>{track.name}</strong><span>{effect.type === "eq" ? "EQ" : effect.type === "reverb" ? "Reverb" : "Volume"}</span></div><div className="effect-window-actions"><button className="effect-window-collapse" onClick={() => setEffectEditorCollapsed((value) => !value)} aria-label={effectEditorCollapsed ? "Expand effect settings" : "Collapse effect settings"}>{effectEditorCollapsed ? "＋" : "−"}</button><button className="effect-close" onClick={() => { setSelectedEffect(null); setEffectEditorPosition(null); }} aria-label="Close effect settings">×</button></div></div>
           {!effectEditorCollapsed && <>
             <label className="effect-enable"><span>Enabled</span><input type="checkbox" checked={effect.enabled} onChange={(event) => updateEffect(track.id, effect.id, { enabled: event.currentTarget.checked })}/></label>
             {effect.type === "volume" && <label className="effect-param"><span>Output level <b>{Math.round(effect.amount * 100)}%</b></span><input type="range" min="0" max="2" step="0.01" value={effect.amount} onChange={(event) => updateEffect(track.id, effect.id, { amount: Number(event.currentTarget.value) })}/></label>}
