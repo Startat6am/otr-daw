@@ -205,7 +205,8 @@ export default function App() {
   const timelinePanRef = useRef<{ pointerId: number; startX: number; startScrollLeft: number } | null>(null);
   const [masterGain, setMasterGain] = useState(0.85);
   const [effectMenuTrack, setEffectMenuTrack] = useState<string | null>(null);
-  const [selectedEffect, setSelectedEffect] = useState<{ trackId: string; effectId: string } | null>(null);\n  const [effectEditorCollapsed, setEffectEditorCollapsed] = useState(false);
+  const [selectedEffect, setSelectedEffect] = useState<{ trackId: string; effectId: string } | null>(null);
+  const [effectEditorCollapsed, setEffectEditorCollapsed] = useState(false);
   const [masterLevel, setMasterLevel] = useState(0);
   const masterGainRef = useRef(0.85);
   const mixerNodesRef = useRef<Map<string, GainNode>>(new Map());
@@ -468,7 +469,8 @@ export default function App() {
           if (effect.type === "volume") return context.createGain();
           if (effect.type === "eq") return context.createBiquadFilter();
           const convolver = context.createConvolver();
-          const roomSize = Math.max(0.15, Math.min(1, effect.roomSize ?? 0.55));\n          const impulseLength = Math.floor(context.sampleRate * (0.25 + roomSize * 1.75));
+          const roomSize = Math.max(0.15, Math.min(1, effect.roomSize ?? 0.55));
+          const impulseLength = Math.floor(context.sampleRate * (0.25 + roomSize * 1.75));
           const impulse = context.createBuffer(2, impulseLength, context.sampleRate);
           for (let channel = 0; channel < 2; channel++) {
             const data = impulse.getChannelData(channel);
@@ -477,7 +479,7 @@ export default function App() {
           convolver.buffer = impulse;
           return convolver;
         });
-        effectNodesRef.current.set(track.id, { type: effects.map((effect) => effect.type).join(","), nodes });
+        effectNodesRef.current.set(track.id, { type: effects.map((effect) => `${effect.type}:${effect.type === "reverb" ? `${effect.roomSize ?? 0.55}:${effect.amount}` : ""}`).join(","), nodes });
         node.disconnect();
         node.connect(nodes[0] as AudioNode || panner);
         nodes.forEach((item, index) => { if (index + 1 < nodes.length) item.connect(nodes[index + 1]); else item.connect(panner!); });
@@ -1164,7 +1166,8 @@ export default function App() {
       <section className="mixer-panel" aria-label="Audio mixer">
         <div className="section-heading mixer-heading"><div><p className="eyebrow">LEVELS & CONTROL</p><h2>Mixer <span className="count">{tracks.length} tracks</span></h2></div><div className="mixer-heading-actions"><div className="master-meter" aria-label={`Master signal ${Math.round(masterLevel * 100)} percent`}><span style={{ width: `${Math.round(masterLevel * 100)}%` }} /></div><button className="collapse-button" aria-expanded={!mixerCollapsed} onClick={() => setMixerCollapsed((value) => !value)}>{mixerCollapsed ? "＋ Expand" : "− Collapse"}</button></div></div>
         {!mixerCollapsed && <div className="mixer-channels">
-\n          <article className="mixer-channel master-channel"><div className="channel-top"><span className="master-mark">M</span><strong>MASTER</strong><span className="channel-db">{masterGain === 0 ? "−∞" : `${(20 * Math.log10(masterGain)).toFixed(1)} dB`}</span></div><label className="volume-control"><span>OUT</span><input aria-label="Master volume" type="range" min="0" max="1" step="0.01" value={masterGain} onChange={(event) => setMaster(Number(event.currentTarget.value))} /><output>{Math.round(masterGain * 100)}%</output></label><div className="master-meter large-meter" aria-label={`Master output level ${Math.round(masterLevel * 100)} percent`}><span style={{ width: `${Math.round(masterLevel * 100)}%` }} /></div></article>
+
+          <article className="mixer-channel master-channel"><div className="channel-top"><span className="master-mark">M</span><strong>MASTER</strong><span className="channel-db">{masterGain === 0 ? "−∞" : `${(20 * Math.log10(masterGain)).toFixed(1)} dB`}</span></div><label className="volume-control"><span>OUT</span><input aria-label="Master volume" type="range" min="0" max="1" step="0.01" value={masterGain} onChange={(event) => setMaster(Number(event.currentTarget.value))} /><output>{Math.round(masterGain * 100)}%</output></label><div className="master-meter large-meter" aria-label={`Master output level ${Math.round(masterLevel * 100)} percent`}><span style={{ width: `${Math.round(masterLevel * 100)}%` }} /></div></article>
           {tracks.map((track, index) => <article className={`mixer-channel ${track.muted ? "channel-muted" : ""} ${track.solo ? "channel-solo" : ""}`} key={track.id}>
             <div className="channel-top"><span className="channel-index">{String(index + 1).padStart(2, "0")}</span><strong>{track.name}</strong><span className="channel-db">{track.gain === 0 ? "−∞" : `${(20 * Math.log10(track.gain)).toFixed(1)} dB`}</span></div>
             <label className="volume-control"><span>VOL</span><input aria-label={`${track.name} volume`} type="range" min="0" max="1" step="0.01" value={track.gain} onChange={(event) => changeTrack(track.id, { gain: Number(event.currentTarget.value) })} /><output>{Math.round(track.gain * 100)}%</output></label>
