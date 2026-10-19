@@ -462,7 +462,7 @@ export default function App() {
       }
       const effects = (track.effects ?? []).filter((effect) => effect.enabled);
       const previous = effectNodesRef.current.get(track.id);
-      if (!previous || previous.nodes.some((item) => item.context !== context) || previous.nodes.length !== effects.length || previous.type !== effects.map((effect) => `${effect.type}:${effect.type === "reverb" ? effect.roomSize ?? 0.55 : ""}`).join(",")) {
+      if (!previous || previous.nodes.some((item) => item.context !== context) || previous.nodes.length !== effects.length || previous.type !== effects.map((effect) => `${effect.type}:${effect.type === "reverb" ? `${effect.roomSize ?? 0.55}:${effect.amount}` : ""}`).join(",")) {
         previous?.nodes.forEach((item) => { try { item.disconnect(); } catch { /* already disconnected */ } });
         const nodes: AudioNode[] = effects.map((effect) => {
           if (effect.type === "volume") return context.createGain();
@@ -472,7 +472,7 @@ export default function App() {
           const impulse = context.createBuffer(2, impulseLength, context.sampleRate);
           for (let channel = 0; channel < 2; channel++) {
             const data = impulse.getChannelData(channel);
-            for (let i = 0; i < impulseLength; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / impulseLength, 1.5 + (1 - roomSize) * 3);
+            for (let i = 0; i < impulseLength; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / impulseLength, 1.5 + (1 - roomSize) * 3) * Math.max(0, Math.min(1, effect.amount));
           }
           convolver.buffer = impulse;
           return convolver;
@@ -1164,7 +1164,8 @@ export default function App() {
       <section className="mixer-panel" aria-label="Audio mixer">
         <div className="section-heading mixer-heading"><div><p className="eyebrow">LEVELS & CONTROL</p><h2>Mixer <span className="count">{tracks.length} tracks</span></h2></div><div className="mixer-heading-actions"><div className="master-meter" aria-label={`Master signal ${Math.round(masterLevel * 100)} percent`}><span style={{ width: `${Math.round(masterLevel * 100)}%` }} /></div><button className="collapse-button" aria-expanded={!mixerCollapsed} onClick={() => setMixerCollapsed((value) => !value)}>{mixerCollapsed ? "＋ Expand" : "− Collapse"}</button></div></div>
         {!mixerCollapsed && <div className="mixer-channels">
-\n          {tracks.map((track, index) => <article className={`mixer-channel ${track.muted ? "channel-muted" : ""} ${track.solo ? "channel-solo" : ""}`} key={track.id}>
+\n          <article className="mixer-channel master-channel"><div className="channel-top"><span className="master-mark">M</span><strong>MASTER</strong><span className="channel-db">{masterGain === 0 ? "−∞" : `${(20 * Math.log10(masterGain)).toFixed(1)} dB`}</span></div><label className="volume-control"><span>OUT</span><input aria-label="Master volume" type="range" min="0" max="1" step="0.01" value={masterGain} onChange={(event) => setMaster(Number(event.currentTarget.value))} /><output>{Math.round(masterGain * 100)}%</output></label><div className="master-meter large-meter" aria-label={`Master output level ${Math.round(masterLevel * 100)} percent`}><span style={{ width: `${Math.round(masterLevel * 100)}%` }} /></div></article>
+          {tracks.map((track, index) => <article className={`mixer-channel ${track.muted ? "channel-muted" : ""} ${track.solo ? "channel-solo" : ""}`} key={track.id}>
             <div className="channel-top"><span className="channel-index">{String(index + 1).padStart(2, "0")}</span><strong>{track.name}</strong><span className="channel-db">{track.gain === 0 ? "−∞" : `${(20 * Math.log10(track.gain)).toFixed(1)} dB`}</span></div>
             <label className="volume-control"><span>VOL</span><input aria-label={`${track.name} volume`} type="range" min="0" max="1" step="0.01" value={track.gain} onChange={(event) => changeTrack(track.id, { gain: Number(event.currentTarget.value) })} /><output>{Math.round(track.gain * 100)}%</output></label>
             <div className="channel-buttons"><button className={track.muted ? "channel-active" : ""} aria-pressed={track.muted} onClick={() => changeTrack(track.id, { muted: !track.muted })}>MUTE</button><button className={track.solo ? "channel-active solo-active" : ""} aria-pressed={track.solo} onClick={() => changeTrack(track.id, { solo: !track.solo })}>SOLO</button></div>
@@ -1174,7 +1175,7 @@ export default function App() {
               {effectMenuTrack === track.id && <div className="effect-picker"><strong>Add effect</strong><button onClick={() => addEffect(track.id, "volume")}>Volume <small>Level / boost</small></button><button onClick={() => addEffect(track.id, "eq")}>EQ <small>Tone shaping</small></button><button onClick={() => addEffect(track.id, "reverb")}>Reverb <small>Space / ambience</small></button></div>}
             </div>
           </article>)}
-          <article className="mixer-channel master-channel"><div className="channel-top"><span className="master-mark">M</span><strong>MASTER</strong><span className="channel-db">{masterGain === 0 ? "−∞" : `${(20 * Math.log10(masterGain)).toFixed(1)} dB`}</span></div><label className="volume-control"><span>OUT</span><input aria-label="Master volume" type="range" min="0" max="1" step="0.01" value={masterGain} onChange={(event) => setMaster(Number(event.currentTarget.value))} /><output>{Math.round(masterGain * 100)}%</output></label><div className="master-meter large-meter" aria-label={`Master output level ${Math.round(masterLevel * 100)} percent`}><span style={{ width: `${Math.round(masterLevel * 100)}%` }} /></div></article>
+
         </div>}
       </section>
 
