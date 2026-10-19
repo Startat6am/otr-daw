@@ -1241,3 +1241,36 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .effect-editor-floating { right: 8px; bottom: 8px; width: min(360px, calc(100vw - 16px)); max-height: 68dvh; padding: 12px; }
   .effect-editor-floating.is-collapsed { width: min(230px, calc(100vw - 16px)); }
 }
+
+/* Compact floating effect controls, matching the clip fade tool scale */
+.effect-editor-floating {
+  right: 10px;
+  bottom: 10px;
+  width: min(252px, calc(100vw - 16px));
+  max-height: min(48dvh, 390px);
+  padding: 9px 10px;
+  border-radius: 11px;
+  gap: 8px;
+}
+.effect-editor-floating .effect-editor-header {
+  margin-bottom: 8px;
+  gap: 8px;
+}
+.effect-editor-title { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.effect-editor-title strong { overflow: hidden; color: #a9b4ad; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.effect-editor-title span { color: #f1f5f2; font-size: 15px; font-weight: 700; line-height: 1.15; }
+.effect-editor-floating .effect-window-collapse,
+.effect-editor-floating .effect-close { width: 27px; height: 27px; min-width: 27px; border-radius: 7px; }
+.effect-editor-floating .effect-window-actions { gap: 4px; }
+.effect-editor-floating .effect-enable { margin: 0 0 7px; font-size: 11px; }
+.effect-editor-floating .effect-param { gap: 4px; margin: 8px 0; font-size: 11px; }
+.effect-editor-floating .effect-param input[type="range"] { margin-top: 2px; }
+.effect-editor-floating .effect-editor-actions { margin-top: 8px; gap: 6px; }
+.effect-editor-floating .effect-editor-actions button { min-height: 29px; padding: 5px 8px; font-size: 11px; }
+.effect-editor-floating .effect-info { display: none; }
+.effect-editor-floating.is-collapsed { width: min(200px, calc(100vw - 16px)); padding: 8px 10px; }
+.effect-editor-floating.is-collapsed .effect-editor-header { margin: 0; }
+@media (max-width: 520px) {
+  .effect-editor-floating { right: 8px; bottom: 8px; width: min(244px, calc(100vw - 16px)); max-height: 46dvh; padding: 9px; }
+  .effect-editor-floating.is-collapsed { width: min(194px, calc(100vw - 16px)); }
+}
