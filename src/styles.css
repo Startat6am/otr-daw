@@ -1433,3 +1433,52 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   }
   .effect-editor-floating.is-collapsed { width: min(210px, calc(100vw - 16px)); padding: 7px 28px 7px 8px; }
 }
+
+
+/* Final popup spacing + draggable effect mixer header */
+.effect-editor-floating {
+  width: min(272px, calc(100vw - 16px));
+  padding: 8px;
+  border-radius: 10px;
+}
+.effect-editor-floating .effect-editor-header {
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  padding-right: 0;
+  margin-bottom: 7px;
+}
+.effect-editor-floating .effect-editor-title { flex: 1 1 auto; min-width: 0; }
+.effect-editor-floating .effect-window-actions { flex: 0 0 auto; }
+.effect-editor-floating .effect-close,
+.effect-editor-floating .effect-window-collapse {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0;
+  font-size: 14px;
+}
+.effect-editor-floating .effect-param input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  height: 14px;
+  min-height: 14px;
+}
+.effect-editor-floating.is-collapsed {
+  width: min(220px, calc(100vw - 16px));
+  padding: 7px 8px;
+}
+@media (max-width: 520px) {
+  .effect-editor-floating {
+    right: 8px;
+    bottom: 8px;
+    width: min(260px, calc(100vw - 16px));
+    max-height: 44dvh;
+    padding: 8px;
+  }
+  .effect-editor-floating.is-collapsed {
+    width: min(210px, calc(100vw - 16px));
+    padding: 7px 8px;
+  }
+}
