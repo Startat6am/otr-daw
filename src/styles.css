@@ -1221,3 +1221,23 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .effect-editor-backdrop { padding: 8px; }
   .effect-editor { padding: 16px; }
 }
+
+/* Effect module has a tiny independent bypass LED; tapping the label opens settings. */
+.effect-module { padding: 4px 5px; gap: 5px; }
+.effect-module-led { display: block; flex: 0 0 3px; width: 3px; height: 6px; min-width: 3px; min-height: 6px; padding: 0; border: 0; border-radius: 1px; background: #69716d; box-shadow: none; cursor: pointer; }
+.effect-module-led.is-on { background: #9be7cf; box-shadow: 0 0 5px #9be7cf88; }
+.effect-module-open { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; gap: 5px; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.effect-module-open small { margin-left: auto; color: #9aa69f; font-size: 7px; }
+.effect-editor-floating { position: fixed; z-index: 1000; right: 14px; bottom: 14px; width: min(390px, calc(100vw - 20px)); max-height: min(72dvh, 620px); overflow-y: auto; border-radius: 15px; padding: 14px; }
+.effect-editor-floating .effect-editor-header { align-items: center; margin-bottom: 14px; }
+.effect-editor-floating .effect-editor-header h2 { font-size: 20px; }
+.effect-window-actions { display: flex; gap: 6px; }
+.effect-window-collapse { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #3b443e; border-radius: 9px; background: #222723; color: #dce8e0; font-size: 20px; cursor: pointer; }
+.effect-editor-floating.is-collapsed { width: min(250px, calc(100vw - 20px)); max-height: none; padding: 10px 12px; }
+.effect-editor-floating.is-collapsed .effect-editor-header { margin: 0; }
+.effect-editor-floating.is-collapsed .effect-editor-header h2 { font-size: 16px; }
+.effect-editor-floating.is-collapsed .effect-editor-header .eyebrow { margin-bottom: 3px; }
+@media (max-width: 520px) {
+  .effect-editor-floating { right: 8px; bottom: 8px; width: min(360px, calc(100vw - 16px)); max-height: 68dvh; padding: 12px; }
+  .effect-editor-floating.is-collapsed { width: min(230px, calc(100vw - 16px)); }
+}
