@@ -1274,3 +1274,88 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
   .effect-editor-floating { right: 8px; bottom: 8px; width: min(244px, calc(100vw - 16px)); max-height: 46dvh; padding: 9px; }
   .effect-editor-floating.is-collapsed { width: min(194px, calc(100vw - 16px)); }
 }
+
+
+/* Match floating effect editors to the compact Selected Clip inspector */
+.effect-editor-floating {
+  width: min(220px, calc(100vw - 16px));
+  max-height: min(40dvh, 300px);
+  padding: 7px 8px;
+  border-radius: 10px;
+  border-color: #35423b;
+}
+.effect-editor-floating .effect-editor-header {
+  min-height: 24px;
+  margin-bottom: 6px;
+  gap: 5px;
+}
+.effect-editor-title { gap: 1px; }
+.effect-editor-title strong { font-size: 9px; line-height: 1.2; }
+.effect-editor-title span { font-size: 12px; line-height: 1.15; }
+.effect-editor-floating .effect-window-collapse,
+.effect-editor-floating .effect-close {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 5px;
+  font-size: 14px;
+  line-height: 1;
+}
+.effect-editor-floating .effect-close { font-size: 17px; }
+.effect-editor-floating .effect-window-actions { gap: 4px; }
+.effect-editor-floating .effect-enable {
+  min-height: 24px;
+  margin: 0 0 4px;
+  gap: 7px;
+  font-size: 9px;
+}
+.effect-editor-floating .effect-enable input {
+  width: 15px;
+  height: 15px;
+}
+.effect-editor-floating .effect-param {
+  gap: 1px;
+  margin: 6px 0;
+  font-size: 9px;
+}
+.effect-editor-floating .effect-param b { font-size: 9px; }
+.effect-editor-floating .effect-param input[type="range"] {
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+}
+.effect-editor-floating .effect-editor-actions {
+  margin-top: 6px;
+  gap: 5px;
+}
+.effect-editor-floating .effect-editor-actions button {
+  min-height: 23px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 9px;
+}
+.effect-editor-floating.is-collapsed {
+  width: min(190px, calc(100vw - 16px));
+  min-height: 38px;
+  padding: 5px 6px;
+}
+.effect-editor-floating.is-collapsed .effect-editor-header { min-height: 26px; }
+@media (max-width: 520px) {
+  .effect-editor-floating {
+    right: 8px;
+    bottom: 8px;
+    width: min(220px, calc(100vw - 16px));
+    max-height: 40dvh;
+    padding: 7px;
+  }
+  .effect-editor-floating.is-collapsed {
+    width: min(190px, calc(100vw - 16px));
+    padding: 5px 6px;
+  }
+}
