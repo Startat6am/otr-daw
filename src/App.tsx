@@ -240,7 +240,7 @@ export default function App() {
   const playheadRef = useRef(0);
   const clockStartRef = useRef(0);
   const rafRef = useRef<number | null>(null);
-  const dragRef = useRef<{ clipId: string; fromTrackId: string; startX: number; start: number; sourceStart: number; sourceEnd: number; mode: "move" | "left" | "right" | "fadeIn" | "fadeOut"; fadeIn: number; fadeOut: number; moved: boolean } | null>(null);
+  const dragRef = useRef<{ clipId: string; fromTrackId: string; startX: number; start: number; sourceStart: number; sourceEnd: number; mode: "move" | "left" | "right" | "fadeIn" | "fadeOut"; fadeIn: number; fadeOut: number; moved: boolean; historyCaptured: boolean } | null>(null);
 
   function commitTracks(updater: (current: Track[]) => Track[]) {
     const current = tracksRef.current;
@@ -1340,21 +1340,29 @@ export default function App() {
                 return <div key={clip.id} className={"timeline-clip " + (selectedClip === clip.id ? "selected " : "") + (dragRef.current?.clipId === clip.id ? "is-dragging" : "")} style={{ left: clip.start * PX_PER_SECOND, width: Math.max(34, duration * PX_PER_SECOND) }} onClick={() => setSelectedClip(clip.id)} role="button" tabIndex={0} aria-label={"Select clip " + asset.name} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedClip(clip.id); }}
                   onPointerDown={(event) => {
                     const target = event.target as HTMLElement;
+                    if (target.closest("button, input, select, a")) return;
                     const edge = target.closest<HTMLElement>("[data-edge]")?.dataset.edge;
                     const fade = target.closest<HTMLElement>("[data-fade]")?.dataset.fade;
-                    dragRef.current = { clipId: clip.id, fromTrackId: track.id, startX: event.clientX, start: clip.start, sourceStart: clip.sourceStart, sourceEnd: clip.sourceEnd, fadeIn: clip.fadeIn ?? 0, fadeOut: clip.fadeOut ?? 0, mode: fade === "fadeIn" || fade === "fadeOut" ? fade : trimMode && (edge === "left" || edge === "right") ? edge : "move", moved: false };
-                    undoStackRef.current.push(tracksRef.current);
-                    if (undoStackRef.current.length > 100) undoStackRef.current.shift();
-                    redoStackRef.current = [];
-                    setHistoryVersion((version) => version + 1);
+                    dragRef.current = { clipId: clip.id, fromTrackId: track.id, startX: event.clientX, start: clip.start, sourceStart: clip.sourceStart, sourceEnd: clip.sourceEnd, fadeIn: clip.fadeIn ?? 0, fadeOut: clip.fadeOut ?? 0, mode: fade === "fadeIn" || fade === "fadeOut" ? fade : trimMode && (edge === "left" || edge === "right") ? edge : "move", moved: false, historyCaptured: false };
                     event.currentTarget.setPointerCapture(event.pointerId);
                     setSelectedClip(clip.id);
                   }}
                   onPointerMove={(event) => {
                     const drag = dragRef.current;
                     if (!drag || drag.clipId !== clip.id) return;
-                    const delta = (event.clientX - drag.startX) / PX_PER_SECOND;
-                    if (Math.abs(event.clientX - drag.startX) > 3) drag.moved = true;
+                    const pixelDelta = event.clientX - drag.startX;
+                    if (!drag.moved && Math.abs(pixelDelta) < 5) return;
+                    if (!drag.moved) {
+                      drag.moved = true;
+                      if (!drag.historyCaptured) {
+                        undoStackRef.current.push(tracksRef.current);
+                        if (undoStackRef.current.length > 100) undoStackRef.current.shift();
+                        redoStackRef.current = [];
+                        drag.historyCaptured = true;
+                        setHistoryVersion((version) => version + 1);
+                      }
+                    }
+                    const delta = pixelDelta / PX_PER_SECOND;
                     if (drag.mode === "fadeIn") {
                       updateClip(clip.id, { fadeIn: Math.max(0, Math.min(clip.sourceEnd - clip.sourceStart, drag.fadeIn + delta)) }, false);
                     } else if (drag.mode === "fadeOut") {
