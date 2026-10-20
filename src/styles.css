@@ -127,7 +127,7 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.045em; }
 /* Touch editing: drag the body, trim with the side handles */
 .timeline-clip { touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 .timeline-clip.is-dragging { cursor: grabbing; opacity: .88; z-index: 6; }
-.trim-handle { position: absolute; top: 0; bottom: 0; z-index: 3; width: 9px; background: #b6f4dc55; cursor: ew-resize; }
+.trim-handle { position: absolute; top: 0; bottom: 0; z-index: 3; width: 16px; background: #b6f4dc55; cursor: ew-resize; touch-action: none; }
 .trim-left { left: 0; border-radius: 6px 0 0 6px; border-right: 1px solid #b8f5dc; }
 .trim-right { right: 0; border-radius: 0 6px 6px 0; border-left: 1px solid #b8f5dc; }
 .timeline-clip > strong { padding-left: 5px; padding-right: 5px; pointer-events: none; }
