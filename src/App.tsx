@@ -203,6 +203,7 @@ export default function App() {
   const bpmGestureRef = useRef<{ startY: number; startBpm: number; lastStep: number } | null>(null);
   const gridGestureRef = useRef<{ startY: number; startIndex: number; lastStep: number } | null>(null);
   const timelinePanRef = useRef<{ pointerId: number; startX: number; startScrollLeft: number } | null>(null);
+  const timelinePinchRef = useRef<{ startDistance: number; startZoom: number; anchorContentX: number; anchorViewportX: number } | null>(null);
   const [masterGain, setMasterGain] = useState(0.85);
   const [effectMenuTrack, setEffectMenuTrack] = useState<string | null>(null);
   const [selectedEffect, setSelectedEffect] = useState<{ trackId: string; effectId: string } | null>(null);
@@ -1267,6 +1268,39 @@ export default function App() {
           </div>;
         })()}
         <div className={"timeline-scroll " + (trackSidebarCollapsed ? "sidebar-collapsed" : "sidebar-expanded")}
+          onTouchStart={(event) => {
+            if (event.touches.length !== 2) return;
+            const element = event.currentTarget;
+            const rect = element.getBoundingClientRect();
+            const first = event.touches[0];
+            const second = event.touches[1];
+            const midpoint = (first.clientX + second.clientX) / 2;
+            const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+            timelinePinchRef.current = {
+              startDistance: Math.max(1, distance),
+              startZoom: timelineZoom,
+              anchorContentX: (element.scrollLeft + midpoint - rect.left) / timelineZoom,
+              anchorViewportX: midpoint - rect.left,
+            };
+          }}
+          onTouchMove={(event) => {
+            const pinch = timelinePinchRef.current;
+            if (!pinch || event.touches.length !== 2) return;
+            event.preventDefault();
+            const element = event.currentTarget;
+            const rect = element.getBoundingClientRect();
+            const first = event.touches[0];
+            const second = event.touches[1];
+            const midpoint = (first.clientX + second.clientX) / 2;
+            const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+            const nextZoom = Math.max(.5, Math.min(2, pinch.startZoom * distance / pinch.startDistance));
+            setTimelineZoom(nextZoom);
+            element.scrollLeft = pinch.anchorContentX * (nextZoom / pinch.startZoom) - (midpoint - rect.left);
+          }}
+          onTouchEnd={(event) => {
+            if (event.touches.length < 2) timelinePinchRef.current = null;
+          }}
+          onTouchCancel={() => { timelinePinchRef.current = null; }}
           onClick={(event) => {
             const target = event.target as HTMLElement;
             if (target.closest(".ruler, .timeline-clip, .track-label, button, input, select, label")) return;
